@@ -1,0 +1,20 @@
+{
+    "files.exclude": {
+        "**/.git": true,
+        "**/.tx": true,
+        "**/autom4te.cache": true,
+        "**/build-aux": true,
+        "**/dash-docs": true,
+        "**/db4": true,
+        "**/depends": true,
+        "**/contrib": true,
+        "**/doc": true,
+        "**/qa": true,
+        "**/*.log": true,
+        "**/*.sh": true,
+        "**/.libs": true,
+        "**/.deps": true,
+        "**/*.o": true,
+        "**/share": true
+      },
+}
