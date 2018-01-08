@@ -8,7 +8,7 @@
 #./autogen.sh
 #./configure LDFLAGS="-L${BDB_PREFIX}/lib/" CPPFLAGS="-I${BDB_PREFIX}/include/" 
 ./autogen.sh
-./configure --with-incompatible-bdb  
+./configure --with-incompatible-bdb  --enable-debug 
 make
  
 
