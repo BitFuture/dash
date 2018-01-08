@@ -400,11 +400,12 @@ static bool ProcessBlockFound(const CBlock* pblock, const CChainParams& chainpar
 }
 
 // ***TODO*** that part changed in bitcoin, we are using a mix with old one here for now
-void static BitcoinMiner(const CChainParams& chainparams, CConnman& connman)
+//挖矿主执行函数
+void static BitcoinMiner(int iIndex,const CChainParams& chainparams, CConnman& connman)
 {
     LogPrintf("DashMiner -- started\n");
-    SetThreadPriority(THREAD_PRIORITY_LOWEST);
-    RenameThread("dash-miner");
+    SetThreadPriority(THREAD_PRIORITY_LOWEST); //设置线程级别
+    RenameThread("dash-miner");  //修改线程名称
 
     unsigned int nExtraNonce = 0;
 
@@ -520,25 +521,33 @@ void static BitcoinMiner(const CChainParams& chainparams, CConnman& connman)
         return;
     }
 }
-
+//挖矿入口
+// bool fGenerate,  １　开始　０　结束
+// int nThreads,　　　挖矿线程数据
+// const CChainParams& chainparams,
+// CConnman& connman
+// 总共　３　个地方调用
+//    程序推出，　fGenerate = 0;
+//    命令行　setgenerate　　启动或关闭挖矿
+//    主程序初始化　根据　－gen 参数自动启动挖矿
 void GenerateBitcoins(bool fGenerate, int nThreads, const CChainParams& chainparams, CConnman& connman)
 {
-    static boost::thread_group* minerThreads = NULL;
+    static boost::thread_group* minerThreads = NULL;  //挖矿线程。
 
     if (nThreads < 0)
-        nThreads = GetNumCores();
+        nThreads = GetNumCores(); // util.cpp 返回物理可支持的线程数
 
-    if (minerThreads != NULL)
+    if (minerThreads != NULL) //停止上次挖矿
     {
         minerThreads->interrupt_all();
         delete minerThreads;
         minerThreads = NULL;
     }
 
-    if (nThreads == 0 || !fGenerate)
+    if (nThreads == 0 || !fGenerate) // 停止挖矿，或者　线程为　０　直接推出
         return;
 
-    minerThreads = new boost::thread_group();
-    for (int i = 0; i < nThreads; i++)
-        minerThreads->create_thread(boost::bind(&BitcoinMiner, boost::cref(chainparams), boost::ref(connman)));
+    minerThreads = new boost::thread_group();  //创建线程池
+    for (int i = 0; i < nThreads; i++)  // 根 据 个数创建线程，　主执行函数为　　BitcoinMiner　参数　chainparams　connman
+        minerThreads->create_thread(boost::bind(&BitcoinMiner,boost::ref(i),boost::cref(chainparams), boost::ref(connman)));
 }

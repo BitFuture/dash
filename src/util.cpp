@@ -948,9 +948,9 @@ void SetThreadPriority(int nPriority)
 int GetNumCores()
 {
 #if BOOST_VERSION >= 105600
-    return boost::thread::physical_concurrency();
+    return boost::thread::physical_concurrency();    //物理线程数目
 #else // Must fall back to hardware_concurrency, which unfortunately counts virtual cores
-    return boost::thread::hardware_concurrency();
+    return boost::thread::hardware_concurrency();　　//　　检测硬件的并发特性 返回硬件线程上下文的数量
 #endif
 }
 
