@@ -403,13 +403,14 @@ static bool ProcessBlockFound(const CBlock* pblock, const CChainParams& chainpar
 //挖矿主执行函数
 void static BitcoinMiner(int iIndex,const CChainParams& chainparams, CConnman& connman)
 {
-    LogPrintf("DashMiner -- started\n");
+    LogPrintf("DashMiner -- started %d\n",iIndex);
     SetThreadPriority(THREAD_PRIORITY_LOWEST); //设置线程级别
     RenameThread("dash-miner");  //修改线程名称
 
     unsigned int nExtraNonce = 0;
 
     boost::shared_ptr<CReserveScript> coinbaseScript;
+    //虚函数，调用到　CWallet::GetScriptForMining　　　CWallet::ReserveKeyFromKeyPool　　从key池中找到有效的一个地址
     GetMainSignals().ScriptForMining(coinbaseScript);
 
     try {

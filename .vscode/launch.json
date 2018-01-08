@@ -10,9 +10,9 @@
             "name": "C++ Launch",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceRoot}/src/dash-cli",
-            "additionalSOLibSearchPath": "${workspaceRoot}/dll/.libs;${workspaceRoot}/dll",
-            "args": ["-regtest -gen  1  -genproclimit 2 "                        
+            "program": "${workspaceRoot}/src/qt/dash-qt",
+            "additionalSOLibSearchPath": "${workspaceRoot}/src/.libs;${workspaceRoot}/src/qt",
+            "args": ["-testtest"                        
             ],            
             "stopAtEntry": true,
             "cwd": "${workspaceRoot}",

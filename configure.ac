@@ -18,6 +18,8 @@ AH_TOP([#ifndef DASH_CONFIG_H])
 AH_TOP([#define DASH_CONFIG_H])
 AH_BOTTOM([#endif //DASH_CONFIG_H])
 
+ 
+
 dnl faketime breaks configure and is only needed for make. Disable it here.
 unset FAKETIME
 
@@ -190,14 +192,18 @@ AC_ARG_ENABLE([debug],
 AC_LANG_PUSH([C++])
 AX_CHECK_COMPILE_FLAG([-Werror],[CXXFLAG_WERROR="-Werror"],[CXXFLAG_WERROR=""])
 
+ 
+ 
 if test "x$enable_debug" = xyes; then
     CPPFLAGS="$CPPFLAGS -DDEBUG"
     if test "x$GCC" = xyes; then
-        CFLAGS="$CFLAGS -g3 -O0"
+        CFLAGS=" -g3 -O0"
+#CFLAGS="$CFLAGS -g3 -O0"
     fi
 
     if test "x$GXX" = xyes; then
-        CXXFLAGS="$CXXFLAGS -g3 -O0"
+        CXXFLAGS="  -g3 -O0"
+#CXXFLAGS="$CXXFLAGS -g3 -O0"
     fi
 fi
 
