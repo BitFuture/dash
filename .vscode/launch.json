@@ -10,7 +10,7 @@
             "name": "C++ Launch",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceRoot}/src/dashd",
+            "program": "${workspaceRoot}/src/qt/dash-qt",
             "additionalSOLibSearchPath": "${workspaceRoot}/src;${workspaceRoot}/src/qt",
             "args": [                                  
             ],            
