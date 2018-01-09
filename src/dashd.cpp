@@ -95,6 +95,7 @@ bool AppInit(int argc, char* argv[])
 
     try
     {
+        //初始化数据文件路径
         bool datadirFromCmdLine = mapArgs.count("-datadir") != 0;
         if (datadirFromCmdLine && !boost::filesystem::is_directory(GetDataDir(false)))
         {
@@ -103,11 +104,13 @@ bool AppInit(int argc, char* argv[])
         }
         try
         {
+            //读配置信息
             ReadConfigFile(mapArgs, mapMultiArgs);
         } catch (const std::exception& e) {
             fprintf(stderr,"Error reading configuration file: %s\n", e.what());
             return false;
         }
+        //判断路径是否合法
         if (!datadirFromCmdLine && !boost::filesystem::is_directory(GetDataDir(false)))
         {
             fprintf(stderr, "Error: Specified data directory \"%s\" from config file does not exist.\n", mapArgs["-datadir"].c_str());
@@ -115,6 +118,8 @@ bool AppInit(int argc, char* argv[])
         }
         // Check for -testnet or -regtest parameter (Params() calls are only valid after this clause)
         try {
+            //设置当前操作类型 网络类型 main testnet regtest
+            //由 CChainParams 派生的三个  CMainParams CTestNetParams CRegTestParams 构造函数初始化不一样
             SelectParams(ChainNameFromCommandLine());
         } catch (const std::exception& e) {
             fprintf(stderr, "Error: %s\n", e.what());

@@ -132,7 +132,7 @@ public:
         pchMessageStart[2] = 0x6b;
         pchMessageStart[3] = 0xbd;
         vAlertPubKey = ParseHex("048240a8748a80a286b270ba126705ced4f2ce5a7847b3610ea3c06513150dade2a8512ed5ea86320824683fc0818f0ac019214973e677acd1244f6d0571fc5103");
-        nDefaultPort = 9999;
+        nDefaultPort = 37864;//9999; eric
         nMaxTipAge = 6 * 60 * 60; // ~144 blocks behind -> 2 x fork detection time, was 24 * 60 * 60 in bitcoin
         nDelayGetHeadersTime = 24 * 60 * 60;
         nPruneAfterHeight = 100000;
@@ -142,12 +142,12 @@ public:
         assert(consensus.hashGenesisBlock == uint256S("0x00000ffd590b1485b3caadc19b22e6379c733355108f107a430458cdf3407ab6"));
         assert(genesis.hashMerkleRoot == uint256S("0xe0028eb9648db56b1ac77cf090b99048a8007e2bb64b68f092c03c7f56a662c7"));
 
-
-        vSeeds.push_back(CDNSSeedData("dash.org", "dnsseed.dash.org"));
-        vSeeds.push_back(CDNSSeedData("dashdot.io", "dnsseed.dashdot.io"));
-        vSeeds.push_back(CDNSSeedData("masternode.io", "dnsseed.masternode.io"));
-        vSeeds.push_back(CDNSSeedData("dashpay.io", "dnsseed.dashpay.io"));
-
+      //eric
+      //  vSeeds.push_back(CDNSSeedData("dash.org", "dnsseed.dash.org"));
+      //  vSeeds.push_back(CDNSSeedData("dashdot.io", "dnsseed.dashdot.io"));
+      //  vSeeds.push_back(CDNSSeedData("masternode.io", "dnsseed.masternode.io"));
+     //   vSeeds.push_back(CDNSSeedData("dashpay.io", "dnsseed.dashpay.io"));
+          vSeeds.push_back(CDNSSeedData("eric.iego.cn", "dash.eric.iego.cn"));
         // Dash addresses start with 'X'
         base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>(1,76);
         // Dash script addresses start with '7'

@@ -10,16 +10,17 @@
             "name": "C++ Launch",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceRoot}/src/qt/dash-qt",
-            "additionalSOLibSearchPath": "${workspaceRoot}/src/.libs;${workspaceRoot}/src/qt",
-            "args": ["-testtest"                        
+            "program": "${workspaceRoot}/src/dashd",
+            "additionalSOLibSearchPath": "${workspaceRoot}/src;${workspaceRoot}/src/qt",
+            "args": [
+                //"-testtest"                        
             ],            
             "stopAtEntry": true,
             "cwd": "${workspaceRoot}",
             "environment": [
                 {
                 "name" : "LD_LIBRARY_PATH",
-                "value" : "${workspaceRoot}/dll/.libs",
+                "value" : "${workspaceRoot}/src",
                 },
             ],
             "externalConsole": false,   
