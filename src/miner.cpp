@@ -62,13 +62,14 @@ public:
 int64_t UpdateTime(CBlockHeader* pblock, const Consensus::Params& consensusParams, const CBlockIndex* pindexPrev)
 {
     int64_t nOldTime = pblock->nTime;
+    //取得11个时间的平均值
     int64_t nNewTime = std::max(pindexPrev->GetMedianTimePast()+1, GetAdjustedTime());
 
     if (nOldTime < nNewTime)
         pblock->nTime = nNewTime;
 
     // Updating time can change work required on testnet:
-    if (consensusParams.fPowAllowMinDifficultyBlocks)
+    if (consensusParams.fPowAllowMinDifficultyBlocks) //regnet testnet 动态调整难度值
         pblock->nBits = GetNextWorkRequired(pindexPrev, pblock, consensusParams);
 
     return nNewTime - nOldTime;
@@ -113,13 +114,15 @@ CBlockTemplate* CreateNewBlock(const CChainParams& chainparams, const CScript& s
     CTxMemPool::setEntries waitSet;
 
     // This vector will be sorted into a priority queue:
-    vector<TxCoinAgePriority> vecPriority;
-    TxCoinAgePriorityCompare pricomparer;
+    vector<TxCoinAgePriority> vecPriority;  //交易优先级排序
+    TxCoinAgePriorityCompare pricomparer;   //交易优先级比较函数 
     std::map<CTxMemPool::txiter, double, CTxMemPool::CompareIteratorByHash> waitPriMap;
     typedef std::map<CTxMemPool::txiter, double, CTxMemPool::CompareIteratorByHash>::iterator waitPriIter;
     double actualPriority = -1;
 
+    // 排序函数   CompareTxMemPoolEntryByScore/
     std::priority_queue<CTxMemPool::txiter, std::vector<CTxMemPool::txiter>, ScoreCompare> clearedTxs;
+
     bool fPrintPriority = GetBoolArg("-printpriority", DEFAULT_PRINTPRIORITY);
     uint64_t nBlockSize = 1000; //块大小
     uint64_t nBlockTx = 0; //块个数
@@ -139,10 +142,10 @@ CBlockTemplate* CreateNewBlock(const CChainParams& chainparams, const CScript& s
         pblock->vtx.push_back(txNew);
         pblocktemplate->vTxFees.push_back(-1); // updated at end
         pblocktemplate->vTxSigOps.push_back(-1); // updated at end
-        pblock->nVersion = ComputeBlockVersion(pindexPrev, chainparams.GetConsensus());
+        pblock->nVersion = ComputeBlockVersion(pindexPrev, chainparams.GetConsensus()); //计算版本号
         // -regtest only: allow overriding block.nVersion with
         // -blockversion=N to test forking scenarios
-        if (chainparams.MineBlocksOnDemand())
+        if (chainparams.MineBlocksOnDemand()) //testnet模式为 true
             pblock->nVersion = GetArg("-blockversion", pblock->nVersion);
 
         int64_t nLockTimeCutoff = (STANDARD_LOCKTIME_VERIFY_FLAGS & LOCKTIME_MEDIAN_TIME_PAST)
@@ -158,42 +161,51 @@ CBlockTemplate* CreateNewBlock(const CChainParams& chainparams, const CScript& s
                 for (CTxMemPool::indexed_transaction_set::iterator mi = mempool.mapTx.begin();
                      mi != mempool.mapTx.end(); ++mi)
                 {
-                    double dPriority = mi->GetPriority(nHeight);
+                    double dPriority = mi->GetPriority(nHeight); //优先级别首先与块的高度相关
                     CAmount dummy;
-                    mempool.ApplyDeltas(mi->GetTx().GetHash(), dPriority, dummy);
+                    mempool.ApplyDeltas(mi->GetTx().GetHash(), dPriority, dummy); //计算对应hash的优先级别
                     vecPriority.push_back(TxCoinAgePriority(dPriority, mi));
                 }
-                std::make_heap(vecPriority.begin(), vecPriority.end(), pricomparer);
+                //将[start, end)范围进行堆排序，默认使用less, 即最大元素放在第一个
+                std::make_heap(vecPriority.begin(), vecPriority.end(), pricomparer); //pricomparer 优先级比较函数 对优先级排序，
             }
-
+             //数组 3 是交易池中  按score 排序 sorted by score (for mining prioritization)  
+             // 这个排序使用的函数 TxCoinAgePriorityCompare 和 pricomparer 是一样的 pricomparer 先比较优先级
             CTxMemPool::indexed_transaction_set::nth_index<3>::type::iterator mi = mempool.mapTx.get<3>().begin();
             CTxMemPool::txiter iter;
-
+            //递归内存交易池 
             while (mi != mempool.mapTx.get<3>().end() || !clearedTxs.empty())
             {
                 bool priorityTx = false;
+                //首先按高优先级处理，当高优先级别的 sizd > nBlockPrioritySize   时候 fPriorityBlock = false 就不走这个流程
                 if (fPriorityBlock && !vecPriority.empty()) { // add a tx from priority queue to fill the blockprioritysize
-                    priorityTx = true;
-                    iter = vecPriority.front().second;
-                    actualPriority = vecPriority.front().first;
+                    priorityTx = true;  //标记这个是高优先级操作
+                    iter = vecPriority.front().second; //交易
+                    actualPriority = vecPriority.front().first;//优先级
+                    // 将front（即第一个最大元素）移动到end的前部，同时将剩下的元素重新构造成(堆排序)一个新的heap
                     std::pop_heap(vecPriority.begin(), vecPriority.end(), pricomparer);
+                    //删除最高优先级的
                     vecPriority.pop_back();
                 }
+                //如果没有推迟交易的记录，直接从交易池中取得，     
                 else if (clearedTxs.empty()) { // add tx with next highest score
+                //从第o个索引表中找到 mi对应的数据指针
                     iter = mempool.mapTx.project<0>(mi);
                     mi++;
                 }
+                // clearedTxs 记录的是当子交易没有找到父交易，先放到 waitSet ，当父交易找到后，移到 clearedTxs 处理
                 else {  // try to add a previously postponed child tx
                     iter = clearedTxs.top();
                     clearedTxs.pop();
                 }
-
-                if (inBlock.count(iter))
+                //因为同时从高优先级，交易池中取数据，所以非常有可能是重复的数据
+                if (inBlock.count(iter))  //如果交易已经在块中，忽略
                     continue; // could have been added to the priorityBlock
 
                 const CTransaction& tx = iter->GetTx();
 
                 bool fOrphan = false;
+                //取得当前交易的父交易，递归查询是否在块中。
                 BOOST_FOREACH(CTxMemPool::txiter parent, mempool.GetMemPoolParents(iter))
                 {
                     if (!inBlock.count(parent)) {
@@ -201,6 +213,7 @@ CBlockTemplate* CreateNewBlock(const CChainParams& chainparams, const CScript& s
                         break;
                     }
                 }
+                //如果当前交易的父交易不在块中，临时把当前交易保存在 waitPriMap  waitSet 中，一个是高优先级，一个是普通交易，然后继续查询
                 if (fOrphan) {
                     if (priorityTx)
                         waitPriMap.insert(std::make_pair(iter,actualPriority));
@@ -208,17 +221,19 @@ CBlockTemplate* CreateNewBlock(const CChainParams& chainparams, const CScript& s
                         waitSet.insert(iter);
                     continue;
                 }
-
+                //如果当前交易是高优先级交易，两个条件退出高优先级，1个是 块大小达到高优先级大小，一个是当前块的费用小于某个特定值  COIN * 144 / 250 
                 unsigned int nTxSize = iter->GetTxSize();
                 if (fPriorityBlock &&
                     (nBlockSize + nTxSize >= nBlockPrioritySize || !AllowFree(actualPriority))) {
                     fPriorityBlock = false;
                     waitPriMap.clear();
                 }
+                //非高优先级  两个条件同时具备 ，退出准备数据  一个是块的大小达到预订值，一个是当前条目手续费低于 当前交易size应该交的最小手续费 
                 if (!priorityTx &&
                     (iter->GetModifiedFee() < ::minRelayTxFee.GetFee(nTxSize) && nBlockSize >= nBlockMinSize)) {
                     break;
                 }
+                //当前交易尺寸和总尺寸之和大于 最大尺寸，并不是马上退出准备数据，而是后面继续找 50次，尺寸小的，保证 nBlockMaxSize 填满。
                 if (nBlockSize + nTxSize >= nBlockMaxSize) {
                     if (nBlockSize >  nBlockMaxSize - 100 || lastFewTxs > 50) {
                         break;
@@ -230,30 +245,33 @@ CBlockTemplate* CreateNewBlock(const CChainParams& chainparams, const CScript& s
                     }
                     continue;
                 }
-
+                // nLockTime  锁定时间 nSequence 多重签名控制，不能进入块
+                // nLockTimeCutoff 这个时间是上面计算得来的，一般为当前块时间，允许是当前时间加2小时，以应对网络时间不同步
+                // 锁定时间小于这个时间的，不加入块
                 if (!IsFinalTx(tx, nHeight, nLockTimeCutoff))
                     continue;
-
+                //签名数量
                 unsigned int nTxSigOps = iter->GetSigOpCount();
+                //最大签名数量
                 unsigned int nMaxBlockSigOps = MaxBlockSigOps(fDIP0001ActiveAtTip);
                 if (nBlockSigOps + nTxSigOps >= nMaxBlockSigOps) {
-                    if (nBlockSigOps > nMaxBlockSigOps - 2) {
+                    if (nBlockSigOps > nMaxBlockSigOps - 2) { //超出最大签名数量
                         break;
                     }
-                    continue;
+                    continue; //签名数量超了，循环下一个
                 }
-
+                //取得交易费用
                 CAmount nTxFees = iter->GetFee();
                 // Added
                 pblock->vtx.push_back(tx);
                 pblocktemplate->vTxFees.push_back(nTxFees);
                 pblocktemplate->vTxSigOps.push_back(nTxSigOps);
-                nBlockSize += nTxSize;
-                ++nBlockTx;
-                nBlockSigOps += nTxSigOps;
-                nFees += nTxFees;
+                nBlockSize += nTxSize;  //总内存大小
+                ++nBlockTx;//总交易量
+                nBlockSigOps += nTxSigOps;//总签名数量
+                nFees += nTxFees;//总交易费
 
-                if (fPrintPriority)
+                if (fPrintPriority) //打印当前加入的交易的日志
                 {
                     double dPriority = iter->GetPriority(nHeight);
                     CAmount dummy;
@@ -261,32 +279,33 @@ CBlockTemplate* CreateNewBlock(const CChainParams& chainparams, const CScript& s
                     LogPrintf("priority %.1f fee %s txid %s\n",
                               dPriority , CFeeRate(iter->GetModifiedFee(), nTxSize).ToString(), tx.GetHash().ToString());
                 }
-
+                //插入交易
                 inBlock.insert(iter);
 
                 // Add transactions that depend on this one to the priority queue
+                // 前面有些孤儿交易，当前如果是他的父交易，尝试加入交易池
                 BOOST_FOREACH(CTxMemPool::txiter child, mempool.GetMemPoolChildren(iter))
                 {
                     if (fPriorityBlock) {
                         waitPriIter wpiter = waitPriMap.find(child);
-                        if (wpiter != waitPriMap.end()) {
+                        if (wpiter != waitPriMap.end()) {//如果是高优先级交易，继续把子交易返回优先级池子
                             vecPriority.push_back(TxCoinAgePriority(wpiter->second,child));
-                            std::push_heap(vecPriority.begin(), vecPriority.end(), pricomparer);
+                            std::push_heap(vecPriority.begin(), vecPriority.end(), pricomparer); //排序
                             waitPriMap.erase(wpiter);
                         }
                     }
                     else {
-                        if (waitSet.count(child)) {
+                        if (waitSet.count(child)) {  //把等待的交易放入  clearedTxs， 而不是删除，因为这些交易是合法的，所以直接进行下一次判断
                             clearedTxs.push(child);
                             waitSet.erase(child);
                         }
                     }
                 }
             }
-
         }
 
         // NOTE: unlike in bitcoin, we need to pass PREVIOUS block height here
+        //计算奖励费，分为两部分，交易费和挖矿费，挖矿费 GetBlockSubsidy 计算，公式比较复杂。
         CAmount blockReward = nFees + GetBlockSubsidy(pindexPrev->nBits, pindexPrev->nHeight, Params().GetConsensus());
 
         // Compute regular coinbase transaction.
@@ -295,6 +314,9 @@ CBlockTemplate* CreateNewBlock(const CChainParams& chainparams, const CScript& s
 
         // Update coinbase transaction with additional info about masternode and governance payments,
         // get some info back to pass to getblocktemplate
+        //执行了3不，如果没有superblock则创建之，否则计算最有主节点费用，从矿工费用中去掉。
+        // GetMasternodePayment  blockValue/5 + blockValue/40 给了主节点 blockValue/5 是固定的， /40 跟块的高度有关
+        // 具体主节点如何分配 需调查，主节点给了谁，也是个迷，需要调查。
         FillBlockPayments(txNew, nHeight, blockReward, pblock->txoutMasternode, pblock->voutSuperblock);
         // LogPrintf("CreateNewBlock -- nBlockHeight %d blockReward %lld txoutMasternode %s txNew %s",
         //             nHeight, blockReward, pblock->txoutMasternode.ToString(), txNew.ToString());
@@ -304,16 +326,17 @@ CBlockTemplate* CreateNewBlock(const CChainParams& chainparams, const CScript& s
         LogPrintf("CreateNewBlock(): total size %u txs: %u fees: %ld sigops %d\n", nBlockSize, nBlockTx, nFees, nBlockSigOps);
 
         // Update block coinbase
-        pblock->vtx[0] = txNew;
-        pblocktemplate->vTxFees[0] = -nFees;
+        pblock->vtx[0] = txNew; //奖励交易，必须是第一个交易
+        pblocktemplate->vTxFees[0] = -nFees; //？？？？？？ 为啥是负数 
 
         // Fill in header
-        pblock->hashPrevBlock  = pindexPrev->GetBlockHash();
-        UpdateTime(pblock, chainparams.GetConsensus(), pindexPrev);
-        pblock->nBits          = GetNextWorkRequired(pindexPrev, pblock, chainparams.GetConsensus());
-        pblock->nNonce         = 0;
-        pblocktemplate->vTxSigOps[0] = GetLegacySigOpCount(pblock->vtx[0]);
+        pblock->hashPrevBlock  = pindexPrev->GetBlockHash();   //填入上一块 hash
+        UpdateTime(pblock, chainparams.GetConsensus(), pindexPrev); //重新填入时间 时间为当前时间和上11块的中间时间最大值
+        pblock->nBits          = GetNextWorkRequired(pindexPrev, pblock, chainparams.GetConsensus()); //计算 难度系数
+        pblock->nNonce         = 0;//重置POW的开始为 0
+        pblocktemplate->vTxSigOps[0] = GetLegacySigOpCount(pblock->vtx[0]); //计算 奖励交易的 签名数 有何用 ？？？？
 
+        //重新检查块的合法性 这个流程比较复杂，主要检查时间，前一块，难度系数等等。
         CValidationState state;
         if (!TestBlockValidity(state, chainparams, *pblock, pindexPrev, false, false)) {
             throw std::runtime_error(strprintf("%s: TestBlockValidity failed: %s", __func__, FormatStateMessage(state)));
@@ -404,7 +427,7 @@ static bool ProcessBlockFound(const CBlock* pblock, const CChainParams& chainpar
 }
 
 // ***TODO*** that part changed in bitcoin, we are using a mix with old one here for now
-//挖矿主执行函数
+//挖矿主执行函数 多线程貌似没有意义吧。
 void static BitcoinMiner(int iIndex,const CChainParams& chainparams, CConnman& connman)
 {
     LogPrintf("DashMiner -- started %d\n",iIndex);
@@ -426,7 +449,7 @@ void static BitcoinMiner(int iIndex,const CChainParams& chainparams, CConnman& c
         if (!coinbaseScript || coinbaseScript->reserveScript.empty())
             throw std::runtime_error("No coinbase script available (mining requires a wallet)");
 
-        while (true) {
+        while (true) { //循环挖矿  大循环
             // 系统参数，fMiningRequiresPeers　决定挖矿是否检查网络连接，根据　启动网络　main = true testnet = true regnet = false
             if (chainparams.MiningRequiresPeers()) {
                 // Busy-wait for the network to come online so we don't waste time mining
@@ -446,7 +469,7 @@ void static BitcoinMiner(int iIndex,const CChainParams& chainparams, CConnman& c
             //
             // Create new block
             //
-            //取得内存池中交易数量
+            //取得内存池中最后交易数量
             unsigned int nTransactionsUpdatedLast = mempool.GetTransactionsUpdated();
             //取得最后一个块
             CBlockIndex* pindexPrev = chainActive.Tip();
@@ -459,6 +482,8 @@ void static BitcoinMiner(int iIndex,const CChainParams& chainparams, CConnman& c
                 return;
             }
             CBlock *pblock = &pblocktemplate->block;
+            //填充 扩展 难度基数，根据本hash和上次全局hase 不等则置 0  奖励交易中的 签名跟 nExtraNonce 和区块高度相关。
+            //这个里面 因为奖励交易数据变了，所以 BlockMerkleRoot 每次要重新计算
             IncrementExtraNonce(pblock, pindexPrev, nExtraNonce);
 
             LogPrintf("DashMiner -- Running miner with %u transactions in block (%u bytes)\n", pblock->vtx.size(),
@@ -466,9 +491,9 @@ void static BitcoinMiner(int iIndex,const CChainParams& chainparams, CConnman& c
 
             //
             // Search
-            //
-            int64_t nStart = GetTime();
-            arith_uint256 hashTarget = arith_uint256().SetCompact(pblock->nBits);
+            //开始计算 POW 
+            int64_t nStart = GetTime();//
+            arith_uint256 hashTarget = arith_uint256().SetCompact(pblock->nBits); //目标hash
             while (true)
             {
                 unsigned int nHashesDone = 0;
@@ -476,46 +501,51 @@ void static BitcoinMiner(int iIndex,const CChainParams& chainparams, CConnman& c
                 uint256 hash;
                 while (true)
                 {
-                    hash = pblock->GetHash();
-                    if (UintToArith256(hash) <= hashTarget)
+                    hash = pblock->GetHash();//取得当前hash
+                    if (UintToArith256(hash) <= hashTarget) //POW 找到了
                     {
                         // Found a solution
                         SetThreadPriority(THREAD_PRIORITY_NORMAL);
                         LogPrintf("DashMiner:\n  proof-of-work found\n  hash: %s\n  target: %s\n", hash.GetHex(), hashTarget.GetHex());
+                        //判断是否接受到新块 放弃
+                        //广播块
+                        //如同接受到新块一下，处理自己的数据。ProcessNewBlock 这个比较复杂，
                         ProcessBlockFound(pblock, chainparams);
                         SetThreadPriority(THREAD_PRIORITY_LOWEST);
+                        //对矿工而言，刷新自己的钱包。
                         coinbaseScript->KeepScript();
 
                         // In regression test mode, stop mining after a block is found. This
                         // allows developers to controllably generate a block on demand.
-                        if (chainparams.MineBlocksOnDemand())
+                        if (chainparams.MineBlocksOnDemand()) //有可能外部程序停止了挖矿。直接退出挖矿程序
                             throw boost::thread_interrupted();
 
                         break;
                     }
                     pblock->nNonce += 1;
                     nHashesDone += 1;
-                    if ((pblock->nNonce & 0xFF) == 0)
+                    if ((pblock->nNonce & 0xFF) == 0)//超过 FF 次，进行一下常规检查
                         break;
                 }
 
-                // Check for stop or if block needs to be rebuilt
+                // Check for stop or if block needs to be rebuilt  上层会打断当前计算，例如 接收到新块等等
                 boost::this_thread::interruption_point();
-                // Regtest mode doesn't require peers
+                // Regtest mode doesn't require peers 没网络连接了
                 if (connman.GetNodeCount(CConnman::CONNECTIONS_ALL) == 0 && chainparams.MiningRequiresPeers())
                     break;
-                if (pblock->nNonce >= 0xffff0000)
+                if (pblock->nNonce >= 0xffff0000) //超过总的计数
                     break;
-                if (mempool.GetTransactionsUpdated() != nTransactionsUpdatedLast && GetTime() - nStart > 60)
+                //60s 没有计算出来，而且接受到新的交易，退出 ？？？？？？
+                if (mempool.GetTransactionsUpdated() != nTransactionsUpdatedLast && GetTime() - nStart > 60) 
                     break;
-                if (pindexPrev != chainActive.Tip())
+                if (pindexPrev != chainActive.Tip())  //接受到新块，前一块已经不是最顶部块了。
                     break;
 
-                // Update nTime every few seconds
+                // Update nTime every few seconds  重新调整时间，注意 这个函数 测试网络重新计算了 nBits
                 if (UpdateTime(pblock, chainparams.GetConsensus(), pindexPrev) < 0)
                     break; // Recreate the block if the clock has run backwards,
                            // so that we can use the correct time.
-                if (chainparams.GetConsensus().fPowAllowMinDifficultyBlocks)
+                if (chainparams.GetConsensus().fPowAllowMinDifficultyBlocks) //测试网络，重新调整难度
                 {
                     // Changing pblock->nTime can change work required on testnet:
                     hashTarget.SetCompact(pblock->nBits);

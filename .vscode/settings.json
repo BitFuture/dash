@@ -16,5 +16,6 @@
         "**/.deps": true,
         "**/*.o": true,
         "**/share": true
-      },
+    },
+    "C_Cpp.errorSquiggles": "Disabled",
 }
