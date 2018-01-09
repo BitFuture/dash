@@ -1294,21 +1294,21 @@ CAmount GetMasternodePayment(int nHeight, CAmount blockValue)
 
     return ret;
 }
-
+//判断链的末梢是否合法
 bool IsInitialBlockDownload()
 {
     static bool lockIBDState = false;
     if (lockIBDState)
         return false;
-    if (fImporting || fReindex)
+    if (fImporting || fReindex) //正在导入或者重建索引
         return true;
     LOCK(cs_main);
     const CChainParams& chainParams = Params();
-    if (chainActive.Tip() == NULL)
+    if (chainActive.Tip() == NULL) //没有块
         return true;
-    if (chainActive.Tip()->nChainWork < UintToArith256(chainParams.GetConsensus().nMinimumChainWork))
+    if (chainActive.Tip()->nChainWork < UintToArith256(chainParams.GetConsensus().nMinimumChainWork)) //工作量证明不合法，必须小于某个
         return true;
-    if (chainActive.Tip()->GetBlockTime() < (GetTime() - chainParams.MaxTipAge()))
+    if (chainActive.Tip()->GetBlockTime() < (GetTime() - chainParams.MaxTipAge())) //时间不合法 小于2小时
         return true;
     lockIBDState = true;
     return false;

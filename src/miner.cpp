@@ -73,34 +73,38 @@ int64_t UpdateTime(CBlockHeader* pblock, const Consensus::Params& consensusParam
 
     return nNewTime - nOldTime;
 }
-
+//创建新块
 CBlockTemplate* CreateNewBlock(const CChainParams& chainparams, const CScript& scriptPubKeyIn)
 {
     // Create new block
     std::unique_ptr<CBlockTemplate> pblocktemplate(new CBlockTemplate());
+    //判断数据指针是否存在
     if(!pblocktemplate.get())
         return NULL;
     CBlock *pblock = &pblocktemplate->block; // pointer for convenience
 
     // Create coinbase tx
+    //压入奖励交易
     CMutableTransaction txNew;
     txNew.vin.resize(1);
     txNew.vin[0].prevout.SetNull();
     txNew.vout.resize(1);
     txNew.vout[0].scriptPubKey = scriptPubKeyIn;
 
-    // Largest block you're willing to create:
+    // Largest block you're willing to create: 最大块尺寸 750000
     unsigned int nBlockMaxSize = GetArg("-blockmaxsize", DEFAULT_BLOCK_MAX_SIZE);
-    // Limit to between 1K and MAX_BLOCK_SIZE-1K for sanity:
+    // Limit to between 1K and MAX_BLOCK_SIZE-1K for sanity: 大于 DEFAULT_BLOCK_PRIORITY_SIZE 小于   MAX_DIP0001_BLOCK_SIZE -  DEFAULT_BLOCK_PRIORITY_SIZE
     nBlockMaxSize = std::max((unsigned int)1000, std::min((unsigned int)(MaxBlockSize(fDIP0001ActiveAtTip)-1000), nBlockMaxSize));
 
     // How much of the block should be dedicated to high-priority transactions,
-    // included regardless of the fees they pay
+    // included regardless of the fees they pay 
+    // 必须提供 DEFAULT_BLOCK_PRIORITY_SIZE 给高优先级的交易，无论是否有交易费
     unsigned int nBlockPrioritySize = GetArg("-blockprioritysize", DEFAULT_BLOCK_PRIORITY_SIZE);
     nBlockPrioritySize = std::min(nBlockMaxSize, nBlockPrioritySize);
 
     // Minimum block size you want to create; block will be filled with free transactions
     // until there are no more or the block reaches this size:
+    //最小块大小
     unsigned int nBlockMinSize = GetArg("-blockminsize", DEFAULT_BLOCK_MIN_SIZE);
     nBlockMinSize = std::min(nBlockMaxSize, nBlockMinSize);
 
@@ -117,8 +121,8 @@ CBlockTemplate* CreateNewBlock(const CChainParams& chainparams, const CScript& s
 
     std::priority_queue<CTxMemPool::txiter, std::vector<CTxMemPool::txiter>, ScoreCompare> clearedTxs;
     bool fPrintPriority = GetBoolArg("-printpriority", DEFAULT_PRINTPRIORITY);
-    uint64_t nBlockSize = 1000;
-    uint64_t nBlockTx = 0;
+    uint64_t nBlockSize = 1000; //块大小
+    uint64_t nBlockTx = 0; //块个数
     unsigned int nBlockSigOps = 100;
     int lastFewTxs = 0;
     CAmount nFees = 0;
@@ -126,10 +130,10 @@ CBlockTemplate* CreateNewBlock(const CChainParams& chainparams, const CScript& s
     {
         LOCK(cs_main);
 
-        CBlockIndex* pindexPrev = chainActive.Tip();
-        const int nHeight = pindexPrev->nHeight + 1;
-        pblock->nTime = GetAdjustedTime();
-        const int64_t nMedianTimePast = pindexPrev->GetMedianTimePast();
+        CBlockIndex* pindexPrev = chainActive.Tip(); //取得最后块
+        const int nHeight = pindexPrev->nHeight + 1; //当前块高度
+        pblock->nTime = GetAdjustedTime();//取得世界时间，本机时间矫正时区
+        const int64_t nMedianTimePast = pindexPrev->GetMedianTimePast(); //取得最后块 前面 11 个块的中间时间
 
         // Add our coinbase tx as first transaction
         pblock->vtx.push_back(txNew);
@@ -411,21 +415,27 @@ void static BitcoinMiner(int iIndex,const CChainParams& chainparams, CConnman& c
 
     boost::shared_ptr<CReserveScript> coinbaseScript;
     //虚函数，调用到　CWallet::GetScriptForMining　　　CWallet::ReserveKeyFromKeyPool　　从key池中找到有效的一个地址
+    // setInternalKeyPool : setExternalKeyPool 两种类型的　　key 池没有弄明白什么区别
     GetMainSignals().ScriptForMining(coinbaseScript);
 
     try {
         // Throw an error if no script was provided.  This can happen
         // due to some internal error but also if the keypool is empty.
         // In the latter case, already the pointer is NULL.
+        // 判断接收奖励的签名是否有效
         if (!coinbaseScript || coinbaseScript->reserveScript.empty())
             throw std::runtime_error("No coinbase script available (mining requires a wallet)");
 
         while (true) {
+            // 系统参数，fMiningRequiresPeers　决定挖矿是否检查网络连接，根据　启动网络　main = true testnet = true regnet = false
             if (chainparams.MiningRequiresPeers()) {
                 // Busy-wait for the network to come online so we don't waste time mining
                 // on an obsolete chain. In regtest mode we expect to fly solo.
                 do {
+                    //判断连接节点个数　CONNECTIONS_ALL　CONNECTIONS_IN CONNECTIONS_OUT
                     bool fvNodesEmpty = connman.GetNodeCount(CConnman::CONNECTIONS_ALL) == 0;
+                    // IsSynced 判断主节点是否同步　CMasternodeSync::SwitchToNextAsset
+                    // IsInitialBlockDownload 判断链的末梢是否合法
                     if (!fvNodesEmpty && !IsInitialBlockDownload() && masternodeSync.IsSynced())
                         break;
                     MilliSleep(1000);
@@ -436,10 +446,12 @@ void static BitcoinMiner(int iIndex,const CChainParams& chainparams, CConnman& c
             //
             // Create new block
             //
+            //取得内存池中交易数量
             unsigned int nTransactionsUpdatedLast = mempool.GetTransactionsUpdated();
+            //取得最后一个块
             CBlockIndex* pindexPrev = chainActive.Tip();
             if(!pindexPrev) break;
-
+            //创建新块
             std::unique_ptr<CBlockTemplate> pblocktemplate(CreateNewBlock(chainparams, coinbaseScript->reserveScript));
             if (!pblocktemplate.get())
             {
