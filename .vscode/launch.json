@@ -12,8 +12,7 @@
             "request": "launch",
             "program": "${workspaceRoot}/src/dashd",
             "additionalSOLibSearchPath": "${workspaceRoot}/src;${workspaceRoot}/src/qt",
-            "args": [
-                //"-testtest"                        
+            "args": [                                  
             ],            
             "stopAtEntry": true,
             "cwd": "${workspaceRoot}",
@@ -46,5 +45,5 @@
 }
 
 
-
+   //"-testtest"   
  
