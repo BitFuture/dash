@@ -321,6 +321,7 @@ CBlockTemplate* CreateNewBlock(const CChainParams& chainparams, const CScript& s
         //执行了3不，如果没有superblock则创建之，否则计算最有主节点费用，从矿工费用中去掉。
         // GetMasternodePayment  blockValue/5  +  blockValue/40 给了主节点   跟块的高度有关  如何选取最优的费用，待调查
         // 当区块高度满足　IsSuperblockTriggered　CreateSuperblock　奖励给　super　如何选取最优的待调查　
+        // 当创建　superblock的时候没有给主节点费用，貌似不公品，程序 bug
         FillBlockPayments(txNew, nHeight, blockReward, pblock->txoutMasternode, pblock->voutSuperblock);
         // LogPrintf("CreateNewBlock -- nBlockHeight %d blockReward %lld txoutMasternode %s txNew %s",
         //             nHeight, blockReward, pblock->txoutMasternode.ToString(), txNew.ToString());
@@ -539,7 +540,7 @@ void static BitcoinMiner(int iIndex,const CChainParams& chainparams, CConnman& c
                     break;
                 if (pblock->nNonce >= 0xffff0000) //超过总的计数
                     break;
-                //60s 没有计算出来，而且接受到新的交易，退出 ？？？？？？
+                //60s 没有计算出来，而且接受到新的交易，退出 ？？？？？？   防止　gpu挖矿　？
                 if (mempool.GetTransactionsUpdated() != nTransactionsUpdatedLast && GetTime() - nStart > 60) 
                     break;
                 if (pindexPrev != chainActive.Tip())  //接受到新块，前一块已经不是最顶部块了。

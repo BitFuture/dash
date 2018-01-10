@@ -130,4 +130,19 @@ CChainParams& Params(const std::string& chain);
  */
 void SelectParams(const std::string& chain);
 
+
+typedef struct t_xtime {
+  int year; int month;  int day;  
+  int hour; int minute;  int second;
+} _xtime ;
+ 
+#define xMINUTE   (60             ) //1分的秒数
+#define xHOUR     (60*xMINUTE)      //1小时的秒数
+#define xDAY      (24*xHOUR   )     //1天的秒数
+#define xYEAR     (365*xDAY   )     //1年的秒数
+
+uint32_t GetThisTime(int iY,int iM,int iD,int ih,int im,int is);
+uint32_t xDate2Seconds(_xtime *time);
+void    xSeconds2Date(uint32_t seconds,_xtime *time );
+
 #endif // BITCOIN_CHAINPARAMS_H

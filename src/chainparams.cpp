@@ -10,7 +10,7 @@
 #include "tinyformat.h"
 #include "util.h"
 #include "utilstrencodings.h"
-
+ 
 #include <assert.h>
 
 #include <boost/assign/list_of.hpp>
@@ -55,6 +55,32 @@ static CBlock CreateGenesisBlock(uint32_t nTime, uint32_t nNonce, uint32_t nBits
     const CScript genesisOutputScript = CScript() << ParseHex("040184710fa689ad5023690c80f3a49c8f13f8d45b8c857fbcbc8bc4a8e4d3eb4b10f4d4604fa08dce601aaf0f470216fe1b51850b4acf21b179c45070ac7b03a9") << OP_CHECKSIG;
     return CreateGenesisBlock(pszTimestamp, genesisOutputScript, nTime, nNonce, nBits, nVersion, genesisReward);
 }
+static CBlock CreateGenesisBlockEric(uint32_t nTime, uint32_t nNonce, uint32_t nBits, int32_t nVersion, const CAmount& genesisReward)
+{
+    const char* pszTimestamp = "Wired 01/Jan/2018 NewPay published New coin";
+    const CScript genesisOutputScript = CScript() << ParseHex("040184710fa689ad5023690c80f3a49c8f13f8d45b8c857fbcbc8bc4a8e4d3eb4b10f4d4604fa08dce601aaf0f470216fe1b51850b4acf21b179c45070ac7b03a9") << OP_CHECKSIG;
+    return CreateGenesisBlock(pszTimestamp, genesisOutputScript, nTime, nNonce, nBits, nVersion, genesisReward);
+}
+#include "arith_uint256.h"
+static void MinerGenesisBlockEric(CBlock *pblock)
+{
+    arith_uint256 hashTarget = arith_uint256().SetCompact(pblock->nBits); //目标hash
+     
+        int iNonce = 0;
+        uint256 hash;
+        while (true)
+        {
+            hash = pblock->GetHash();//取得当前hash
+            if (UintToArith256(hash) <= hashTarget) //POW 找到了
+            { 
+                   break;
+            }
+            pblock->nNonce += 1;
+            iNonce ++;
+                 
+        }
+     
+};
 
 /**
  * Main network
@@ -279,10 +305,20 @@ public:
         nDelayGetHeadersTime = 24 * 60 * 60;
         nPruneAfterHeight = 100000;
 
-        genesis = CreateGenesisBlock(1390095618, 28917698, 0x1e0ffff0, 1, 50 * COIN);
+
+       //1514736000 2018-01-01  通过网站转当前时间为 unix时间戳　
+       uint32_t uGenesisTime = GetThisTime(2018,1,1,0,0,0);
+       genesis = CreateGenesisBlockEric(1514736000, 1797646, 0x1e0ffff0, 2, 50 * COIN);
+        MinerGenesisBlockEric(&genesis);
+
+       
         consensus.hashGenesisBlock = genesis.GetHash();
-        assert(consensus.hashGenesisBlock == uint256S("0x00000ffd590b1485b3caadc19b22e6379c733355108f107a430458cdf3407ab6"));
-        assert(genesis.hashMerkleRoot == uint256S("0xe0028eb9648db56b1ac77cf090b99048a8007e2bb64b68f092c03c7f56a662c7"));
+
+        LogPrintf("==== %s %s %d\n",genesis.hashMerkleRoot.ToString(),consensus.hashGenesisBlock.ToString(),genesis.nNonce);
+
+        std::string strHash = consensus.hashGenesisBlock.ToString();
+        //assert(consensus.hashGenesisBlock == uint256S("0x00000ffd590b1485b3caadc19b22e6379c733355108f107a430458cdf3407ab6"));
+        //assert(genesis.hashMerkleRoot == uint256S("0xe0028eb9648db56b1ac77cf090b99048a8007e2bb64b68f092c03c7f56a662c7"));
 
       //eric
       //  vSeeds.push_back(CDNSSeedData("dash.org", "dnsseed.dash.org"));
@@ -596,4 +632,105 @@ void SelectParams(const std::string& network)
 {
     SelectBaseParams(network);
     pCurrentParams = &Params(network);
+}
+
+
+
+
+uint32_t GetThisTime(int iY,int iM,int iD,int ih,int im,int is)
+{ 
+  _xtime tm;
+  tm. year = iY;
+  tm. month = iM; 
+  tm. day = iD;  
+  tm. hour = ih;
+  tm. minute = im;
+  tm. second  = is;
+  return xDate2Seconds(&tm);
+}
+uint32_t  xDate2Seconds(_xtime *time)
+{
+  static unsigned int  month[12]={
+    /*01月*/xDAY*(0),
+    /*02月*/xDAY*(31),
+    /*03月*/xDAY*(31+28),
+    /*04月*/xDAY*(31+28+31),
+    /*05月*/xDAY*(31+28+31+30),
+    /*06月*/xDAY*(31+28+31+30+31),
+    /*07月*/xDAY*(31+28+31+30+31+30),
+    /*08月*/xDAY*(31+28+31+30+31+30+31),
+    /*09月*/xDAY*(31+28+31+30+31+30+31+31),
+    /*10月*/xDAY*(31+28+31+30+31+30+31+31+30),
+    /*11月*/xDAY*(31+28+31+30+31+30+31+31+30+31),
+    /*12月*/xDAY*(31+28+31+30+31+30+31+31+30+31+30)
+  };
+  unsigned int  seconds = 0;
+  unsigned int  year = 0;
+  year = time->year-1970;       //不考虑2100年千年虫问题
+  seconds = xYEAR*year + xDAY*((year+1)/4);  //前几年过去的秒数
+  seconds += month[time->month-1];      //加上今年本月过去的秒数
+  if( (time->month > 2) && (((year+2)%4)==0) )//2008年为闰年
+    seconds += xDAY;            //闰年加1天秒数
+  seconds += xDAY*(time->day-1);         //加上本天过去的秒数
+  seconds += xHOUR*time->hour;           //加上本小时过去的秒数
+  seconds += xMINUTE*time->minute;       //加上本分钟过去的秒数
+  seconds += time->second;               //加上当前秒数<br>　seconds -= 8 * xHOUR;
+  return seconds;
+}
+void xSeconds2Date(uint32_t seconds,_xtime *time )
+{
+    static unsigned int month[12]={
+        /*01月*/31, 
+        /*02月*/28, 
+        /*03月*/31, 
+        /*04月*/30, 
+        /*05月*/31, 
+        /*06月*/30, 
+        /*07月*/31, 
+        /*08月*/31, 
+        /*09月*/30, 
+        /*10月*/31, 
+        /*11月*/30, 
+        /*12月*/31 
+    };
+    unsigned int days; 
+    unsigned short leap_y_count; 
+    time->second      = seconds % 60;//获得秒 
+    seconds          /= 60; 
+    time->minute      =  seconds % 60;//获得分 
+    seconds          += 8 * 60 ;        //时区矫正 转为UTC+8 bylzs
+    seconds          /= 60; 
+    time->hour        = seconds % 24;//获得时 
+    days              = seconds / 24;//获得总天数 
+    leap_y_count = (days + 365) / 1461;//过去了多少个闰年(4年一闰) 
+    if( ((days + 366) % 1461) == 0) 
+    {//闰年的最后1天 
+        time->year = 1970 + (days / 366);//获得年 
+        time->month = 12;              //调整月 
+        time->day = 31; 
+        return; 
+    } 
+    days -= leap_y_count; 
+    time->year = 1970 + (days / 365);     //获得年 
+    days %= 365;                       //今年的第几天 
+    days = 01 + days;                  //1日开始 
+    if( (time->year % 4) == 0 ) 
+    { 
+        if(days > 60)--days;            //闰年调整 
+        else 
+        { 
+            if(days == 60) 
+            { 
+                time->month = 2; 
+                time->day = 29; 
+                return; 
+            } 
+        } 
+    } 
+    for(time->month = 0;month[time->month] < days;time->month++) 
+    { 
+        days -= month[time->month]; 
+    } 
+    ++time->month;               //调整月 
+    time->day = days;           //获得日 
 }
