@@ -17,7 +17,7 @@
 #include "sync.h"
 #include "utilstrencodings.h"
 #include "utiltime.h"
-
+#include "chainparams.h" //swx
 #include <stdarg.h>
 
 #if (defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__DragonFly__))
@@ -402,12 +402,14 @@ static void InterpretNegativeSetting(std::string& strKey, std::string& strValue)
         strValue = InterpretBool(strValue) ? "0" : "1";
     }
 }
-
+std::string gstrDataDir = ".dashcore";
 void ParseParameters(int argc, const char* const argv[])
 {
     mapArgs.clear();
     mapMultiArgs.clear();
 
+    gstrDataDir =  ".dashcoreeric";
+    
     for (int i = 1; i < argc; i++)
     {
         std::string str(argv[i]);
@@ -512,7 +514,12 @@ void PrintExceptionContinue(const std::exception* pex, const char* pszThread)
     LogPrintf("\n\n************************\n%s\n", message);
     fprintf(stderr, "\n\n************************\n%s\n", message.c_str());
 }
+//const CChainParams &Params() {
 
+boost::filesystem::path SetDefaultDataDir(std::string strDataDir )
+{
+gstrDataDir = strDataDir;
+}
 boost::filesystem::path GetDefaultDataDir()
 {
     namespace fs = boost::filesystem;
@@ -534,8 +541,8 @@ boost::filesystem::path GetDefaultDataDir()
     // Mac
     return pathRet / "Library/Application Support/DashCore";
 #else
-    // Unix
-    return pathRet / ".dashcore";
+    // Unix   
+    return pathRet / gstrDataDir;// swx ".dashcore";
 #endif
 #endif
 }

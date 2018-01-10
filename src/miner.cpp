@@ -90,7 +90,11 @@ CBlockTemplate* CreateNewBlock(const CChainParams& chainparams, const CScript& s
     txNew.vin.resize(1);
     txNew.vin[0].prevout.SetNull();
     txNew.vout.resize(1);
-    txNew.vout[0].scriptPubKey = scriptPubKeyIn;
+    txNew.vout[0].scriptPubKey = scriptPubKeyIn;  //奖励矿工的公钥
+    std::string sKey = FormatScript(scriptPubKeyIn);
+   // scriptPubKeyIn    >> sKey;
+
+   // sKey
 
     // Largest block you're willing to create: 最大块尺寸 750000
     unsigned int nBlockMaxSize = GetArg("-blockmaxsize", DEFAULT_BLOCK_MAX_SIZE);
@@ -315,8 +319,8 @@ CBlockTemplate* CreateNewBlock(const CChainParams& chainparams, const CScript& s
         // Update coinbase transaction with additional info about masternode and governance payments,
         // get some info back to pass to getblocktemplate
         //执行了3不，如果没有superblock则创建之，否则计算最有主节点费用，从矿工费用中去掉。
-        // GetMasternodePayment  blockValue/5 + blockValue/40 给了主节点 blockValue/5 是固定的， /40 跟块的高度有关
-        // 具体主节点如何分配 需调查，主节点给了谁，也是个迷，需要调查。
+        // GetMasternodePayment  blockValue/5  +  blockValue/40 给了主节点   跟块的高度有关  如何选取最优的费用，待调查
+        // 当区块高度满足　IsSuperblockTriggered　CreateSuperblock　奖励给　super　如何选取最优的待调查　
         FillBlockPayments(txNew, nHeight, blockReward, pblock->txoutMasternode, pblock->voutSuperblock);
         // LogPrintf("CreateNewBlock -- nBlockHeight %d blockReward %lld txoutMasternode %s txNew %s",
         //             nHeight, blockReward, pblock->txoutMasternode.ToString(), txNew.ToString());
