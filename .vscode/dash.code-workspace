@@ -42,7 +42,8 @@
 			"thread": "cpp",
 			"typeinfo": "cpp",
 			"codecvt": "cpp",
-			"memory": "cpp"
+			"memory": "cpp",
+			"*.ipp": "cpp"
 		}
 	}
 }

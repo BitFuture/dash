@@ -76,6 +76,7 @@ static void MinerGenesisBlockEric(CBlock *pblock)
                    break;
             }
             pblock->nNonce += 1;
+            assert(0);
             iNonce ++;
                  
         }
@@ -308,8 +309,9 @@ public:
 
        //1514736000 2018-01-01  通过网站转当前时间为 unix时间戳　
        uint32_t uGenesisTime = GetThisTime(2018,1,1,0,0,0);
-       genesis = CreateGenesisBlockEric(1514736000, 1797646, 0x1e0ffff0, 2, 50 * COIN);
+       genesis = CreateGenesisBlockEric(uGenesisTime, 1797646, 0x1e0ffff0, 2, 50 * COIN);
         MinerGenesisBlockEric(&genesis);
+
 
        
         consensus.hashGenesisBlock = genesis.GetHash();
@@ -634,7 +636,36 @@ void SelectParams(const std::string& network)
     pCurrentParams = &Params(network);
 }
 
-
+int Gettime_zone()
+{
+  time_t time_utc = 0;  
+  struct tm tm_local;  
+ 
+  
+    // Get the UTC time  
+    time(&time_utc);  
+  
+    // Get the local time  
+    // Use localtime_r for threads safe  
+    localtime_r(&time_utc, &tm_local);  
+  
+   // time_t time_local = 0;  
+    struct tm tm_gmt;  
+  
+    // Change tm to time_t   
+   // time_local = mktime(&tm_local);  
+  
+    // Change it to GMT tm  
+    gmtime_r(&time_utc, &tm_gmt);  
+  
+    int time_zone = tm_local.tm_hour - tm_gmt.tm_hour;  
+    if (time_zone < -12) {  
+        time_zone += 24;   
+    } else if (time_zone > 12) {  
+        time_zone -= 24;  
+    }  
+    return time_zone;
+}
 
 
 uint32_t GetThisTime(int iY,int iM,int iD,int ih,int im,int is)
@@ -643,7 +674,7 @@ uint32_t GetThisTime(int iY,int iM,int iD,int ih,int im,int is)
   tm. year = iY;
   tm. month = iM; 
   tm. day = iD;  
-  tm. hour = ih;
+  tm. hour = ih-Gettime_zone();
   tm. minute = im;
   tm. second  = is;
   return xDate2Seconds(&tm);

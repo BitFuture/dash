@@ -74,6 +74,41 @@ int64_t UpdateTime(CBlockHeader* pblock, const Consensus::Params& consensusParam
 
     return nNewTime - nOldTime;
 }
+ /*
+#include "governance-classes.h"
+void   EricCalcAllBlockSubsidy(const CChainParams& chainparams)
+{
+       CAmount blockSuper1=0,blockReward1=0,blockMaster1 = 0,blockAll,blockAll1; 
+       double dblockSuper=0,dblockReward=0, dblockMaster = 0 ; 
+       const Consensus::Params& consensusParams = chainparams.GetConsensus();
+       CBlock *pPreIndex = &chainparams.GenesisBlock().;
+       int nBits = 0x1e0ffff0;//consensusParams.fPowAllowMinDifficultyBlocks ? UintToArith256(consensusParams.powLimit).GetCompact() : 1;
+       for(int nHeight = 1;nHeight <=0x7ffffff;nHeight++)
+       {
+       CAmount blockSuper  = CSuperblock::GetPaymentsLimit(nHeight);
+       CAmount blockReward = GetBlockSubsidy(nBits, nHeight, consensusParams);
+       CAmount blockMaster = GetMasternodePayment(nHeight,blockReward);
+       blockReward -= blockMaster; 
+
+       blockSuper1 += blockSuper;
+       blockReward1 += blockReward;
+       blockMaster1 += blockMaster;
+
+       blockAll = blockSuper1+blockReward1+blockMaster1;
+       blockAll1 = blockAll/COIN;
+       dblockSuper = blockSuper1 *1.0/blockAll;
+       dblockReward = blockReward1 * 1.0/blockAll;
+       dblockMaster = blockMaster1* 1.0/blockAll;
+       int k =0;
+       k++;
+       }
+       double d1 = blockReward1 *1.0 /(blockReward1+blockMaster1) *0.9;
+       double d2 = blockMaster1 *1.0 /(blockReward1+blockMaster1) *0.9;
+       int i =0;
+       i++;
+
+}  */
+ 
 //创建新块
 CBlockTemplate* CreateNewBlock(const CChainParams& chainparams, const CScript& scriptPubKeyIn)
 {
@@ -165,6 +200,10 @@ CBlockTemplate* CreateNewBlock(const CChainParams& chainparams, const CScript& s
                 for (CTxMemPool::indexed_transaction_set::iterator mi = mempool.mapTx.begin();
                      mi != mempool.mapTx.end(); ++mi)
                 {
+                    //有两个值，一个是交易接受到时候， 所有输出　（每个输出值　（coin.out.nValue）　 * (nHeight-coin.nHeight)　接受时高度　－　每笔入的上次消费的高度）　／　交易文字大小　
+                    //这个算法决定，交易输出越大，交易输出和输入间隔越大，优先级越高，交易签名越大，优先级越低，
+                    //第二个优先级　　 ((double)(currentHeight-entryHeight)*inChainInputValue)/nModSize　　（当前创建块　－　加入块）　×　所有输入总和／交易大小。
+                    //这个参数避免某笔交易等待时间太久。
                     double dPriority = mi->GetPriority(nHeight); //优先级别首先与块的高度相关
                     CAmount dummy;
                     mempool.ApplyDeltas(mi->GetTx().GetHash(), dPriority, dummy); //计算对应hash的优先级别
@@ -422,6 +461,7 @@ static bool ProcessBlockFound(const CBlock* pblock, const CChainParams& chainpar
     }
 
     // Inform about the new block
+    // CWallet：：mapRequestCount[hash] = 0;
     GetMainSignals().BlockFound(pblock->GetHash());
 
     // Process this block the same as if we had received it from another node
@@ -517,7 +557,7 @@ void static BitcoinMiner(int iIndex,const CChainParams& chainparams, CConnman& c
                         //如同接受到新块一下，处理自己的数据。ProcessNewBlock 这个比较复杂，
                         ProcessBlockFound(pblock, chainparams);
                         SetThreadPriority(THREAD_PRIORITY_LOWEST);
-                        //对矿工而言，刷新自己的钱包。
+                        //？？？？？？？ 每次挖矿用不同的地址接受费用　？
                         coinbaseScript->KeepScript();
 
                         // In regression test mode, stop mining after a block is found. This
@@ -594,7 +634,7 @@ void GenerateBitcoins(bool fGenerate, int nThreads, const CChainParams& chainpar
 
     if (nThreads == 0 || !fGenerate) // 停止挖矿，或者　线程为　０　直接推出
         return;
-
+ 
     minerThreads = new boost::thread_group();  //创建线程池
     for (int i = 0; i < nThreads; i++)  // 根 据 个数创建线程，　主执行函数为　　BitcoinMiner　参数　chainparams　connman
         minerThreads->create_thread(boost::bind(&BitcoinMiner,boost::ref(i),boost::cref(chainparams), boost::ref(connman)));

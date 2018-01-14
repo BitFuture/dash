@@ -3220,7 +3220,7 @@ bool CheckBlock(const CBlock& block, CValidationState& state, bool fCheckPOW, bo
 
 static bool CheckIndexAgainstCheckpoint(const CBlockIndex* pindexPrev, CValidationState& state, const CChainParams& chainparams, const uint256& hash)
 {
-    if (*pindexPrev->phashBlock == chainparams.GetConsensus().hashGenesisBlock)
+    if (*pindexPrev->phashBlock == chainparams.GetConsensus().hashGenesisBlock) //前一区块为创世区块
         return true;
 
     int nHeight = pindexPrev->nHeight+1;
@@ -3237,7 +3237,7 @@ bool ContextualCheckBlockHeader(const CBlockHeader& block, CValidationState& sta
     const Consensus::Params& consensusParams = Params().GetConsensus();
     int nHeight = pindexPrev->nHeight + 1;
     // Check proof of work
-    if(Params().NetworkIDString() == CBaseChainParams::MAIN && nHeight <= 68589){
+    if(Params().NetworkIDString() == CBaseChainParams::MAIN && nHeight <= 68589){  //检查工作量必须合法　小于某个区块的时候，在某个范围即可　？？？？？？
         // architecture issues with DGW v1 and v2)
         unsigned int nBitsNext = GetNextWorkRequired(pindexPrev, &block, consensusParams);
         double n1 = ConvertBitsToDouble(block.nBits);
@@ -3246,18 +3246,19 @@ bool ContextualCheckBlockHeader(const CBlockHeader& block, CValidationState& sta
         if (abs(n1-n2) > n1*0.5)
             return state.DoS(100, error("%s : incorrect proof of work (DGW pre-fork) - %f %f %f at %d", __func__, abs(n1-n2), n1, n2, nHeight),
                             REJECT_INVALID, "bad-diffbits");
-    } else {
+    } else {//重现取得工作量值比较
         if (block.nBits != GetNextWorkRequired(pindexPrev, &block, consensusParams))
             return state.DoS(100, error("%s : incorrect proof of work at %d", __func__, nHeight),
                             REJECT_INVALID, "bad-diffbits");
     }
 
     // Check timestamp against prev
-    if (block.GetBlockTime() <= pindexPrev->GetMedianTimePast())
+    if (block.GetBlockTime() <= pindexPrev->GetMedianTimePast())//检查时间戳，必须比前面的时间戳大
         return state.Invalid(error("%s: block's timestamp is too early", __func__),
                              REJECT_INVALID, "time-too-old");
 
     // Reject block.nVersion=1 blocks when 95% (75% on testnet) of the network has upgraded:
+    // IsSuperMajority 从　pindexPrev　往前数　consensusParams.nMajorityWindow　１０００　个，当版本号大于２　的个数超过　consensusParams.nMajorityRejectBlockOutdated　９５０　认为版本号不合法
     if (block.nVersion < 2 && IsSuperMajority(2, pindexPrev, consensusParams.nMajorityRejectBlockOutdated, consensusParams))
         return state.Invalid(error("%s: rejected nVersion=1 block", __func__),
                              REJECT_OBSOLETE, "bad-version");
@@ -3524,10 +3525,13 @@ bool TestBlockValidity(CValidationState& state, const CChainParams& chainparams,
     indexDummy.nHeight = pindexPrev->nHeight + 1;
 
     // NOTE: CheckBlockHeader is called by CheckBlock
+    //头部检查，检查　工作量，时间戳，版本号
     if (!ContextualCheckBlockHeader(block, state, pindexPrev))
         return false;
+    //检查块的合法性，主要检查in out 的有效性
     if (!CheckBlock(block, state, fCheckPOW, fCheckMerkleRoot))
         return false;
+    //主要检查locktime 版本号
     if (!ContextualCheckBlock(block, state, pindexPrev))
         return false;
     if (!ConnectBlock(block, state, &indexDummy, viewNew, true))
@@ -3986,9 +3990,9 @@ bool InitBlockIndex(const CChainParams& chainparams)
     // Only add the genesis block if not reindexing (in which case we reuse the one already on disk)
     if (!fReindex) {
         try {
-            CBlock &block = const_cast<CBlock&>(chainparams.GenesisBlock());
+            CBlock &block = const_cast<CBlock&>(chainparams.GenesisBlock());  //取得创世区块
             // Start new block file
-            unsigned int nBlockSize = ::GetSerializeSize(block, SER_DISK, CLIENT_VERSION);
+            unsigned int nBlockSize = ::GetSerializeSize(block, SER_DISK, CLIENT_VERSION); // 取得区块大小ADD_SERIALIZE_METHODS CBlock::SerializationOp
             CDiskBlockPos blockPos;
             CValidationState state;
             if (!FindBlockPos(state, blockPos, nBlockSize+8, 0, block.GetBlockTime()))
