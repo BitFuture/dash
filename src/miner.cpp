@@ -549,7 +549,7 @@ void static BitcoinMiner(int iIndex,const CChainParams& chainparams, CConnman& c
                 while (true)
                 {
                     hash = pblock->GetHash();//取得当前hash
-                    if (1)//swxd UintToArith256(hash) <= hashTarget) //POW 找到了
+                    if (UintToArith256(hash) <= hashTarget) //POW 找到了
                     {
                         // Found a solution
                         SetThreadPriority(THREAD_PRIORITY_NORMAL);
