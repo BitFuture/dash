@@ -174,7 +174,8 @@ CBlockTemplate* CreateNewBlock(const CChainParams& chainparams, const CScript& s
 
         CBlockIndex* pindexPrev = chainActive.Tip(); //取得最后块
         const int nHeight = pindexPrev->nHeight + 1; //当前块高度
-        pblock->nTime = GetAdjustedTime();//取得世界时间，本机时间矫正时区
+       // pblock->nTime = GetAdjustedTime();//取得世界时间，本机时间矫正时区
+        pblock->nTime = pindexPrev->GetBlockTime() + 2.5*60;//取得世界时间，本机时间矫正时区
         const int64_t nMedianTimePast = pindexPrev->GetMedianTimePast(); //取得最后块 前面 11 个块的中间时间
 
         // Add our coinbase tx as first transaction
@@ -200,7 +201,8 @@ CBlockTemplate* CreateNewBlock(const CChainParams& chainparams, const CScript& s
                 for (CTxMemPool::indexed_transaction_set::iterator mi = mempool.mapTx.begin();
                      mi != mempool.mapTx.end(); ++mi)
                 {
-                    //有两个值，一个是交易接受到时候， 所有输出　（每个输出值　（coin.out.nValue）　 * (nHeight-coin.nHeight)　接受时高度　－　每笔入的上次消费的高度）　／　交易文字大小　
+                    //CTxMemPoolEntry::GetPriority  在　AcceptToMemoryPoolWorker　接收到交易的时候计算初始值
+                    //有两个值，一个是交易接受到时候， CCoinsViewCache::GetPriority 所有输出　（每个输出值　（coin.out.nValue）　 * (nHeight-coin.nHeight)　接受时高度　－　每笔入的上次消费的高度）　／　交易文字大小　
                     //这个算法决定，交易输出越大，交易输出和输入间隔越大，优先级越高，交易签名越大，优先级越低，
                     //第二个优先级　　 ((double)(currentHeight-entryHeight)*inChainInputValue)/nModSize　　（当前创建块　－　加入块）　×　所有输入总和／交易大小。
                     //这个参数避免某笔交易等待时间太久。
@@ -547,7 +549,7 @@ void static BitcoinMiner(int iIndex,const CChainParams& chainparams, CConnman& c
                 while (true)
                 {
                     hash = pblock->GetHash();//取得当前hash
-                    if (UintToArith256(hash) <= hashTarget) //POW 找到了
+                    if (1)//swxd UintToArith256(hash) <= hashTarget) //POW 找到了
                     {
                         // Found a solution
                         SetThreadPriority(THREAD_PRIORITY_NORMAL);

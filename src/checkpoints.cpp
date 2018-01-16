@@ -60,8 +60,8 @@ namespace Checkpoints {
     {
         const MapCheckpoints& checkpoints = data.mapCheckpoints;
 
-        BOOST_REVERSE_FOREACH(const MapCheckpoints::value_type& i, checkpoints)
-        {
+        BOOST_REVERSE_FOREACH(const MapCheckpoints::value_type& i, checkpoints)//从检查点中找区块的相同hash 
+        {//这个有疑问，怎么能保证区块的hash在check中一定能找到呢，或者说区块的hash完全是个未知数，而checkpoint中的hash难道是动态改的？
             const uint256& hash = i.second;
             BlockMap::const_iterator t = mapBlockIndex.find(hash);
             if (t != mapBlockIndex.end())

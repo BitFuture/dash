@@ -308,17 +308,22 @@ public:
 
 
        //1514736000 2018-01-01  通过网站转当前时间为 unix时间戳　
-       uint32_t uGenesisTime = GetThisTime(2018,1,1,0,0,0);
+     /*uint32_t uGenesisTime = GetThisTime(2018,1,1,0,0,0);
        genesis = CreateGenesisBlockEric(uGenesisTime, 1797646, 0x1e0ffff0, 2, 50 * COIN);
         MinerGenesisBlockEric(&genesis);
-
-
-       
+  
         consensus.hashGenesisBlock = genesis.GetHash();
 
         LogPrintf("==== %s %s %d\n",genesis.hashMerkleRoot.ToString(),consensus.hashGenesisBlock.ToString(),genesis.nNonce);
+       std::string strHash = consensus.hashGenesisBlock.ToString();
+       */
+    
+        genesis = CreateGenesisBlock(1390095618, 28917698, 0x1e0ffff0, 1, 50 * COIN);
+        consensus.hashGenesisBlock = genesis.GetHash();
+        assert(consensus.hashGenesisBlock == uint256S("0x00000ffd590b1485b3caadc19b22e6379c733355108f107a430458cdf3407ab6"));
+        assert(genesis.hashMerkleRoot == uint256S("0xe0028eb9648db56b1ac77cf090b99048a8007e2bb64b68f092c03c7f56a662c7"));
 
-        std::string strHash = consensus.hashGenesisBlock.ToString();
+  
         //assert(consensus.hashGenesisBlock == uint256S("0x00000ffd590b1485b3caadc19b22e6379c733355108f107a430458cdf3407ab6"));
         //assert(genesis.hashMerkleRoot == uint256S("0xe0028eb9648db56b1ac77cf090b99048a8007e2bb64b68f092c03c7f56a662c7"));
 

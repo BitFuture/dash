@@ -736,7 +736,7 @@ public:
     int64_t nOrderPosNext;
     std::map<uint256, int> mapRequestCount;
 
-    std::map<CTxDestination, CAddressBookData> mapAddressBook;
+    std::map<CTxDestination, CAddressBookData> mapAddressBook; //地址本数据，前面为私钥，后面地址数据名称
 
     CPubKey vchDefaultKey;
 

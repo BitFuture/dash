@@ -27,19 +27,20 @@ unsigned int static KimotoGravityWell(const CBlockIndex* pindexLast, const Conse
     double EventHorizonDeviationFast;
     double EventHorizonDeviationSlow;
 
-    uint64_t pastSecondsMin = params.nPowTargetTimespan * 0.025;
-    uint64_t pastSecondsMax = params.nPowTargetTimespan * 7;
-    uint64_t PastBlocksMin = pastSecondsMin / params.nPowTargetSpacing;
-    uint64_t PastBlocksMax = pastSecondsMax / params.nPowTargetSpacing;
-
-    if (BlockLastSolved == NULL || BlockLastSolved->nHeight == 0 || (uint64_t)BlockLastSolved->nHeight < PastBlocksMin) { return UintToArith256(params.powLimit).GetCompact(); }
+    uint64_t pastSecondsMin = params.nPowTargetTimespan * 0.025; //2160 nPowTargetTimespan = 24*60*60
+    uint64_t pastSecondsMax = params.nPowTargetTimespan * 7;     //604800
+    uint64_t PastBlocksMin = pastSecondsMin / params.nPowTargetSpacing;  //14.4  nPowTargetSpacing  2.5 * 60
+    uint64_t PastBlocksMax = pastSecondsMax / params.nPowTargetSpacing;  //4032
+    //返回最小值
+    if (BlockLastSolved == NULL || BlockLastSolved->nHeight == 0 || (uint64_t)BlockLastSolved->nHeight < PastBlocksMin)   {
+         return UintToArith256(params.powLimit).GetCompact(); }
 
     for (unsigned int i = 1; BlockReading && BlockReading->nHeight > 0; i++) {
-        if (PastBlocksMax > 0 && i > PastBlocksMax) { break; }
+        if (PastBlocksMax > 0 && i > PastBlocksMax) { break; } //计算7天的块  PastBlocksMax 为7天的块数
         PastBlocksMass++;
 
         PastDifficultyAverage.SetCompact(BlockReading->nBits);
-        if (i > 1) {
+        if (i > 1) { //计算难度平均值
             // handle negative arith_uint256
             if(PastDifficultyAverage >= PastDifficultyAveragePrev)
                 PastDifficultyAverage = ((PastDifficultyAverage - PastDifficultyAveragePrev) / i) + PastDifficultyAveragePrev;
@@ -48,8 +49,9 @@ unsigned int static KimotoGravityWell(const CBlockIndex* pindexLast, const Conse
         }
         PastDifficultyAveragePrev = PastDifficultyAverage;
 
-        PastRateActualSeconds = BlockLastSolved->GetBlockTime() - BlockReading->GetBlockTime();
-        PastRateTargetSeconds = params.nPowTargetSpacing * PastBlocksMass;
+        PastRateActualSeconds = BlockLastSolved->GetBlockTime() - BlockReading->GetBlockTime();//实际时间
+        PastRateTargetSeconds = params.nPowTargetSpacing * PastBlocksMass;//预计时间
+
         PastRateAdjustmentRatio = double(1);
         if (PastRateActualSeconds < 0) { PastRateActualSeconds = 0; }
         if (PastRateActualSeconds != 0 && PastRateTargetSeconds != 0) {
@@ -58,7 +60,7 @@ unsigned int static KimotoGravityWell(const CBlockIndex* pindexLast, const Conse
         EventHorizonDeviation = 1 + (0.7084 * pow((double(PastBlocksMass)/double(28.2)), -1.228));
         EventHorizonDeviationFast = EventHorizonDeviation;
         EventHorizonDeviationSlow = 1 / EventHorizonDeviation;
-
+        //在某个范围内就退出
         if (PastBlocksMass >= PastBlocksMin) {
                 if ((PastRateAdjustmentRatio <= EventHorizonDeviationSlow) || (PastRateAdjustmentRatio >= EventHorizonDeviationFast))
                 { assert(BlockReading); break; }
@@ -66,7 +68,7 @@ unsigned int static KimotoGravityWell(const CBlockIndex* pindexLast, const Conse
         if (BlockReading->pprev == NULL) { assert(BlockReading); break; }
         BlockReading = BlockReading->pprev;
     }
-
+    //计算预期值
     arith_uint256 bnNew(PastDifficultyAverage);
     if (PastRateActualSeconds != 0 && PastRateTargetSeconds != 0) {
         bnNew *= PastRateActualSeconds;
@@ -82,23 +84,25 @@ unsigned int static KimotoGravityWell(const CBlockIndex* pindexLast, const Conse
 
 unsigned int static DarkGravityWave(const CBlockIndex* pindexLast, const Consensus::Params& params) {
     /* current difficulty formula, dash - DarkGravity v3, written by Evan Duffield - evan@dash.org */
+    //consensus.powLimit = uint256S("00000fffff000000000000000000000000000000000000000000000000000000");
     const arith_uint256 bnPowLimit = UintToArith256(params.powLimit);
     int64_t nPastBlocks = 24;
 
     // make sure we have at least (nPastBlocks + 1) blocks, otherwise just return powLimit
+    //小于24返回最小难度系数
     if (!pindexLast || pindexLast->nHeight < nPastBlocks) {
         return bnPowLimit.GetCompact();
     }
 
     const CBlockIndex *pindex = pindexLast;
     arith_uint256 bnPastTargetAvg;
-
+    //取前24个难度系数的平均值
     for (unsigned int nCountBlocks = 1; nCountBlocks <= nPastBlocks; nCountBlocks++) {
         arith_uint256 bnTarget = arith_uint256().SetCompact(pindex->nBits);
         if (nCountBlocks == 1) {
             bnPastTargetAvg = bnTarget;
         } else {
-            // NOTE: that's not an average really...
+            // NOTE: that's not an average really... 并不是真正的平均值
             bnPastTargetAvg = (bnPastTargetAvg * nCountBlocks + bnTarget) / (nCountBlocks + 1);
         }
 
@@ -110,16 +114,18 @@ unsigned int static DarkGravityWave(const CBlockIndex* pindexLast, const Consens
 
     arith_uint256 bnNew(bnPastTargetAvg);
 
-    int64_t nActualTimespan = pindexLast->GetBlockTime() - pindex->GetBlockTime();
+    int64_t nActualTimespan = pindexLast->GetBlockTime() - pindex->GetBlockTime();// 24个的时间差
     // NOTE: is this accurate? nActualTimespan counts it for (nPastBlocks - 1) blocks only...
-    int64_t nTargetTimespan = nPastBlocks * params.nPowTargetSpacing;
+    int64_t nTargetTimespan = nPastBlocks * params.nPowTargetSpacing; //24*2.5×60
 
+    //实际时间太小
     if (nActualTimespan < nTargetTimespan/3)
         nActualTimespan = nTargetTimespan/3;
+    //实际时间太大    
     if (nActualTimespan > nTargetTimespan*3)
         nActualTimespan = nTargetTimespan*3;
 
-    // Retarget
+    // Retarget  实际时间/目标时间，将挖矿时间逐步收敛到 2.5*60
     bnNew *= nActualTimespan;
     bnNew /= nTargetTimespan;
 
@@ -139,14 +145,15 @@ unsigned int GetNextWorkRequiredBTC(const CBlockIndex* pindexLast, const CBlockH
         return nProofOfWorkLimit;
 
     // Only change once per interval
+    // params.DifficultyAdjustmentInterval() 返回1天的块高度
     if ((pindexLast->nHeight+1) % params.DifficultyAdjustmentInterval() != 0)
     {
-        if (params.fPowAllowMinDifficultyBlocks)
+        if (params.fPowAllowMinDifficultyBlocks) //main 为 false
         {
             // Special difficulty rule for testnet:
             // If the new block's timestamp is more than 2* 2.5 minutes
             // then allow mining of a min-difficulty block.
-            if (pblock->GetBlockTime() > pindexLast->GetBlockTime() + params.nPowTargetSpacing*2)
+            if (pblock->GetBlockTime() > pindexLast->GetBlockTime() + params.nPowTargetSpacing*2) //大于 2个块时间
                 return nProofOfWorkLimit;
             else
             {
@@ -160,7 +167,7 @@ unsigned int GetNextWorkRequiredBTC(const CBlockIndex* pindexLast, const CBlockH
         return pindexLast->nBits;
     }
 
-    // Go back by what we want to be 1 day worth of blocks
+    // Go back by what we want to be 1 day worth of blocks 找到一天前的一个
     int nHeightFirst = pindexLast->nHeight - (params.DifficultyAdjustmentInterval()-1);
     assert(nHeightFirst >= 0);
     const CBlockIndex* pindexFirst = pindexLast->GetAncestor(nHeightFirst);
@@ -171,10 +178,12 @@ unsigned int GetNextWorkRequiredBTC(const CBlockIndex* pindexLast, const CBlockH
 
 unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader *pblock, const Consensus::Params& params)
 {
-    // Most recent algo first
+    // Most recent algo first  
+    //                          consensus.nPowDGWHeight = 34140;
     if (pindexLast->nHeight + 1 >= params.nPowDGWHeight) {
         return DarkGravityWave(pindexLast, params);
     }
+   //  consensus.nPowKGWHeight = 15200;
     else if (pindexLast->nHeight + 1 >= params.nPowKGWHeight) {
         return KimotoGravityWell(pindexLast, params);
     }

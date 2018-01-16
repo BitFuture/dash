@@ -516,10 +516,7 @@ void PrintExceptionContinue(const std::exception* pex, const char* pszThread)
 }
 //const CChainParams &Params() {
 
-boost::filesystem::path SetDefaultDataDir(std::string strDataDir )
-{
-gstrDataDir = strDataDir;
-}
+ 
 boost::filesystem::path GetDefaultDataDir()
 {
     namespace fs = boost::filesystem;

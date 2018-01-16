@@ -43,7 +43,8 @@
 			"typeinfo": "cpp",
 			"codecvt": "cpp",
 			"memory": "cpp",
-			"*.ipp": "cpp"
+			"*.ipp": "cpp",
+			"map": "cpp"
 		}
 	}
 }
