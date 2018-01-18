@@ -174,8 +174,8 @@ CBlockTemplate* CreateNewBlock(const CChainParams& chainparams, const CScript& s
 
         CBlockIndex* pindexPrev = chainActive.Tip(); //取得最后块
         const int nHeight = pindexPrev->nHeight + 1; //当前块高度
-       // pblock->nTime = GetAdjustedTime();//取得世界时间，本机时间矫正时区
-        pblock->nTime = pindexPrev->GetBlockTime() + 2.5*60;//取得世界时间，本机时间矫正时区
+        pblock->nTime = GetAdjustedTime();//取得世界时间，本机时间矫正时区
+        
         const int64_t nMedianTimePast = pindexPrev->GetMedianTimePast(); //取得最后块 前面 11 个块的中间时间
 
         // Add our coinbase tx as first transaction
@@ -212,6 +212,7 @@ CBlockTemplate* CreateNewBlock(const CChainParams& chainparams, const CScript& s
                     vecPriority.push_back(TxCoinAgePriority(dPriority, mi));
                 }
                 //将[start, end)范围进行堆排序，默认使用less, 即最大元素放在第一个
+                //注意这个，先按照 dPriority 排序，如果优先级相等，则按照  Scroe 普通规则等同排序
                 std::make_heap(vecPriority.begin(), vecPriority.end(), pricomparer); //pricomparer 优先级比较函数 对优先级排序，
             }
              //数组 3 是交易池中  按score 排序 sorted by score (for mining prioritization)  
@@ -463,7 +464,7 @@ static bool ProcessBlockFound(const CBlock* pblock, const CChainParams& chainpar
     }
 
     // Inform about the new block
-    // CWallet：：mapRequestCount[hash] = 0;
+    // CWallet：：mapRequestCount[hash] = 0; 代表从来没有发送给别人。
     GetMainSignals().BlockFound(pblock->GetHash());
 
     // Process this block the same as if we had received it from another node

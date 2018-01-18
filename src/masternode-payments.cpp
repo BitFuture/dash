@@ -211,6 +211,9 @@ void FillBlockPayments(CMutableTransaction& txNew, int nBlockHeight, CAmount blo
 {
     // only create superblocks if spork is enabled AND if superblock is actually triggered
     // (height should be validated inside)
+
+ 
+
     if(sporkManager.IsSporkActive(SPORK_9_SUPERBLOCKS_ENABLED) &&
         CSuperblockManager::IsSuperblockTriggered(nBlockHeight)) {
             LogPrint("gobject", "FillBlockPayments -- triggered superblock creation at height %d\n", nBlockHeight);
@@ -450,7 +453,7 @@ bool CMasternodePayments::IsScheduled(CMasternode& mn, int nNotBlockHeight)
 {
     LOCK(cs_mapMasternodeBlocks);
 
-    if(!masternodeSync.IsMasternodeListSynced()) return false;
+    if(!masternodeSync.IsMasternodeListSynced()) return false;//主节点个数 >2
 
     CScript mnpayee;
     mnpayee = GetScriptForDestination(mn.pubKeyCollateralAddress.GetID());
