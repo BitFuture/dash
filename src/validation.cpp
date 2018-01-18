@@ -1150,6 +1150,7 @@ bool GetTransaction(const uint256 &hash, CTransaction &txOut, const Consensus::P
 
 bool WriteBlockToDisk(const CBlock& block, CDiskBlockPos& pos, const CMessageHeader::MessageStartChars& messageStart)
 {
+    return true;
     // Open history file to append
     CAutoFile fileout(OpenBlockFile(pos), SER_DISK, CLIENT_VERSION);
     if (fileout.IsNull())
@@ -3106,7 +3107,7 @@ bool FindUndoPos(CValidationState &state, int nFile, CDiskBlockPos &pos, unsigne
 
 bool CheckBlockHeader(const CBlockHeader& block, CValidationState& state, bool fCheckPOW)
 {
-     
+    return true;///swxd
     // Check proof of work matches claimed amount  检查算力保证
     if (fCheckPOW && !CheckProofOfWork(block.GetHash(), block.nBits, Params().GetConsensus()))
         return state.DoS(50, error("CheckBlockHeader(): proof of work failed"),
@@ -3129,11 +3130,11 @@ bool CheckBlock(const CBlock& block, CValidationState& state, bool fCheckPOW, bo
 
     // Check that the header is valid (particularly PoW).  This is mostly
     // redundant with the call in AcceptBlockHeader.
-    if (!CheckBlockHeader(block, state, fCheckPOW)) //重新校验时间和算力
+    if (!CheckBlockHeader(block, state, fCheckPOW))
         return false;
 
     // Check the merkle root.
-    if (fCheckMerkleRoot) { //校验交易记录
+    if (fCheckMerkleRoot) {
         bool mutated;
         uint256 hashMerkleRoot2 = BlockMerkleRoot(block, &mutated);
         if (block.hashMerkleRoot != hashMerkleRoot2)
@@ -3235,7 +3236,7 @@ static bool CheckIndexAgainstCheckpoint(const CBlockIndex* pindexPrev, CValidati
 
 bool ContextualCheckBlockHeader(const CBlockHeader& block, CValidationState& state, CBlockIndex * const pindexPrev)
 {
-   
+    return true;//swxd
     const Consensus::Params& consensusParams = Params().GetConsensus();
     int nHeight = pindexPrev->nHeight + 1;
     // Check proof of work
@@ -3412,7 +3413,7 @@ static bool AcceptBlock(const CBlock& block, CValidationState& state, const CCha
     CBlockIndex *pindexDummy = NULL;
     CBlockIndex *&pindex = ppindex ? *ppindex : pindexDummy;
 
-    if (!AcceptBlockHeader(block, state, chainparams, &pindex)) //接受头部
+    if (!AcceptBlockHeader(block, state, chainparams, &pindex))
         return false;
 
     // Try to process all requested blocks that we don't have, but only
@@ -3452,6 +3453,8 @@ static bool AcceptBlock(const CBlock& block, CValidationState& state, const CCha
 
     int nHeight = pindex->nHeight;
 
+   
+    {
     // Write block to history file
     try {
         unsigned int nBlockSize = ::GetSerializeSize(block, SER_DISK, CLIENT_VERSION);
@@ -3471,7 +3474,7 @@ static bool AcceptBlock(const CBlock& block, CValidationState& state, const CCha
 
     if (fCheckForPruning)
         FlushStateToDisk(state, FLUSH_STATE_NONE); // we just allocated more disk space for block files
-
+    }
     return true;
 }
 
@@ -3509,9 +3512,9 @@ bool ProcessNewBlock(const CChainParams& chainparams, const CBlock* pblock, bool
 
     CValidationState state; // Only used to report errors, not invalidity - ignore it
     if (!ActivateBestChain(state, chainparams, pblock))
-        return error("%s: ActivateBestChain failed", __func__);
+       return error("%s: ActivateBestChain failed", __func__);
 
-    LogPrintf("%s : ACCEPTED\n", __func__);
+    //LogPrintf("%s : ACCEPTED\n", __func__);
     return true;
 }
 

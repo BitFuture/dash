@@ -332,7 +332,7 @@ public:
       //  vSeeds.push_back(CDNSSeedData("dashdot.io", "dnsseed.dashdot.io"));
       //  vSeeds.push_back(CDNSSeedData("masternode.io", "dnsseed.masternode.io"));
      //   vSeeds.push_back(CDNSSeedData("dashpay.io", "dnsseed.dashpay.io"));
-          vSeeds.push_back(CDNSSeedData("eric.iego.cn", "dash.eric.iego.cn"));
+       //   vSeeds.push_back(CDNSSeedData("eric.iego.cn", "dash.eric.iego.cn"));
         // Dash addresses start with 'X'
         base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>(1,76);
         // Dash script addresses start with '7'
@@ -684,7 +684,7 @@ uint32_t GetThisTime(int iY,int iM,int iD,int ih,int im,int is)
   tm. second  = is;
   return xDate2Seconds(&tm);
 }
-uint32_t  xDate2Seconds(_xtime *time)
+uint32_t xDate2Seconds(_xtime *time)
 {
   static unsigned int  month[12]={
     /*01月*/xDAY*(0),

@@ -173,9 +173,9 @@ CBlockTemplate* CreateNewBlock(const CChainParams& chainparams, const CScript& s
         LOCK(cs_main);
 
         CBlockIndex* pindexPrev = chainActive.Tip(); //取得最后块
-        const int nHeight = pindexPrev->nHeight + 1; //当前块高度
-        pblock->nTime = GetAdjustedTime();//取得世界时间，本机时间矫正时区
-        
+        int nHeight = pindexPrev->nHeight + 1; //当前块高度
+       // pblock->nTime = GetAdjustedTime();//取得世界时间，本机时间矫正时区
+        pblock->nTime = pindexPrev->GetBlockTime() + 2.5*60;//取得世界时间，本机时间矫正时区
         const int64_t nMedianTimePast = pindexPrev->GetMedianTimePast(); //取得最后块 前面 11 个块的中间时间
 
         // Add our coinbase tx as first transaction
@@ -212,7 +212,6 @@ CBlockTemplate* CreateNewBlock(const CChainParams& chainparams, const CScript& s
                     vecPriority.push_back(TxCoinAgePriority(dPriority, mi));
                 }
                 //将[start, end)范围进行堆排序，默认使用less, 即最大元素放在第一个
-                //注意这个，先按照 dPriority 排序，如果优先级相等，则按照  Scroe 普通规则等同排序
                 std::make_heap(vecPriority.begin(), vecPriority.end(), pricomparer); //pricomparer 优先级比较函数 对优先级排序，
             }
              //数组 3 是交易池中  按score 排序 sorted by score (for mining prioritization)  
@@ -364,7 +363,26 @@ CBlockTemplate* CreateNewBlock(const CChainParams& chainparams, const CScript& s
         // GetMasternodePayment  blockValue/5  +  blockValue/40 给了主节点   跟块的高度有关  如何选取最优的费用，待调查
         // 当区块高度满足　IsSuperblockTriggered　CreateSuperblock　奖励给　super　如何选取最优的待调查　
         // 当创建　superblock的时候没有给主节点费用，貌似不公品，程序 bug
-        FillBlockPayments(txNew, nHeight, blockReward, pblock->txoutMasternode, pblock->voutSuperblock);
+
+       /* if (nHeight-5 >  Params().GetConsensus().nPowDGWHeight *20 +111) 
+        {
+            while (nHeight < 10532000) {         
+                pblock->nBits =        pindexPrev->nBits;
+                blockReward =  GetBlockSubsidy(pindexPrev->nBits, nHeight, Params().GetConsensus());
+                txNew.vout[0].nValue = blockReward;
+                FillBlockPayments(txNew, nHeight, blockReward, pblock->txoutMasternode, pblock->GetBlockTime(), pblock->voutSuperblock);
+                nHeight = nHeight + 1;
+                pblock->nTime += 2.5 * 60;
+                _xtime time ;
+                xSeconds2Date(pblock->nTime,&time );
+                if (time.year >= 2051)
+                {
+                    pblock->nTime = 0;
+                    break;
+                }
+            }
+        } else*/
+            FillBlockPayments(txNew, nHeight, blockReward, pblock->txoutMasternode, pblock->GetBlockTime(), pblock->voutSuperblock);
         // LogPrintf("CreateNewBlock -- nBlockHeight %d blockReward %lld txoutMasternode %s txNew %s",
         //             nHeight, blockReward, pblock->txoutMasternode.ToString(), txNew.ToString());
 
@@ -378,16 +396,12 @@ CBlockTemplate* CreateNewBlock(const CChainParams& chainparams, const CScript& s
 
         // Fill in header
         pblock->hashPrevBlock  = pindexPrev->GetBlockHash();   //填入上一块 hash
-        UpdateTime(pblock, chainparams.GetConsensus(), pindexPrev); //重新填入时间 时间为当前时间和上11块的中间时间最大值
+       // UpdateTime(pblock, chainparams.GetConsensus(), pindexPrev); //重新填入时间 时间为当前时间和上11块的中间时间最大值
         pblock->nBits          = GetNextWorkRequired(pindexPrev, pblock, chainparams.GetConsensus()); //计算 难度系数
         pblock->nNonce         = 0;//重置POW的开始为 0
         pblocktemplate->vTxSigOps[0] = GetLegacySigOpCount(pblock->vtx[0]); //计算 奖励交易的 签名数 有何用 ？？？？
 
-        //重新检查块的合法性 这个流程比较复杂，主要检查时间，前一块，难度系数等等。
-        CValidationState state;
-        if (!TestBlockValidity(state, chainparams, *pblock, pindexPrev, false, false)) {
-            throw std::runtime_error(strprintf("%s: TestBlockValidity failed: %s", __func__, FormatStateMessage(state)));
-        }
+       
     }
 
     return pblocktemplate.release();
@@ -464,7 +478,7 @@ static bool ProcessBlockFound(const CBlock* pblock, const CChainParams& chainpar
     }
 
     // Inform about the new block
-    // CWallet：：mapRequestCount[hash] = 0; 代表从来没有发送给别人。
+    // CWallet：：mapRequestCount[hash] = 0;
     GetMainSignals().BlockFound(pblock->GetHash());
 
     // Process this block the same as if we had received it from another node
@@ -530,6 +544,8 @@ void static BitcoinMiner(int iIndex,const CChainParams& chainparams, CConnman& c
                 return;
             }
             CBlock *pblock = &pblocktemplate->block;
+            if(pblock ->nTime <=0)
+               return;
             //填充 扩展 难度基数，根据本hash和上次全局hase 不等则置 0  奖励交易中的 签名跟 nExtraNonce 和区块高度相关。
             //这个里面 因为奖励交易数据变了，所以 BlockMerkleRoot 每次要重新计算
             IncrementExtraNonce(pblock, pindexPrev, nExtraNonce);
@@ -545,12 +561,12 @@ void static BitcoinMiner(int iIndex,const CChainParams& chainparams, CConnman& c
             while (true)
             {
                 unsigned int nHashesDone = 0;
-
+                bool bfind = false;
                 uint256 hash;
                 while (true)
                 {
                     hash = pblock->GetHash();//取得当前hash
-                    if (UintToArith256(hash) <= hashTarget) //POW 找到了
+                    if (1)//swxd UintToArith256(hash) <= hashTarget) //POW 找到了
                     {
                         // Found a solution
                         SetThreadPriority(THREAD_PRIORITY_NORMAL);
@@ -568,6 +584,7 @@ void static BitcoinMiner(int iIndex,const CChainParams& chainparams, CConnman& c
                         if (chainparams.MineBlocksOnDemand()) //有可能外部程序停止了挖矿。直接退出挖矿程序
                             throw boost::thread_interrupted();
 
+                        bfind = true;
                         break;
                     }
                     pblock->nNonce += 1;
@@ -589,9 +606,11 @@ void static BitcoinMiner(int iIndex,const CChainParams& chainparams, CConnman& c
                 if (pindexPrev != chainActive.Tip())  //接受到新块，前一块已经不是最顶部块了。
                     break;
 
+                if(bfind)
+                    break;
                 // Update nTime every few seconds  重新调整时间，注意 这个函数 测试网络重新计算了 nBits
-                if (UpdateTime(pblock, chainparams.GetConsensus(), pindexPrev) < 0)
-                    break; // Recreate the block if the clock has run backwards,
+               // if (UpdateTime(pblock, chainparams.GetConsensus(), pindexPrev) < 0)
+                //    break; // Recreate the block if the clock has run backwards,
                            // so that we can use the correct time.
                 if (chainparams.GetConsensus().fPowAllowMinDifficultyBlocks) //测试网络，重新调整难度
                 {

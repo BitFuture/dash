@@ -494,14 +494,8 @@ bool CMasternodeMan::GetNextMasternodeInQueueForPayment(int nBlockHeight, bool f
 {
     mnInfoRet = masternode_info_t();
     nCountRet = 0;
-    //综合原理，先拒绝一些加入时间不够的主节点，当有效节点小于总节点 /3的时候，不考虑加入时间。
-    //该节点必须被其他节点确认过，每天至少有6次确认。
-    //必须服务量到达一定程度，按过去8个区块的服务量。
-    //按已经接受费用排序，已经获得奖励费用多的靠后。
-    //从排序中找出前 10% 
-    //在这10%的主节点中找出当前块-101 hask最接近的主节点作为奖励节点。也就是必须从102个块开始奖励。
 
-    if (!masternodeSync.IsWinnersListSynced()) { //主节点个数必须大于3 
+    if (!masternodeSync.IsWinnersListSynced()) {
         // without winner list we can't reliably find the next winner anyway
         return false;
     }
@@ -515,22 +509,22 @@ bool CMasternodeMan::GetNextMasternodeInQueueForPayment(int nBlockHeight, bool f
         Make a vector with all of the last paid times
     */
 
-    int nMnCount = CountMasternodes();//总共主节点个数
+    int nMnCount = CountMasternodes();
 
     for (auto& mnpair : mapMasternodes) {
-        if(!mnpair.second.IsValidForPayment()) continue;//主节点无效，或dog超时
+        if(!mnpair.second.IsValidForPayment()) continue;
 
         //check protocol version
-        if(mnpair.second.nProtocolVersion < mnpayments.GetMinMasternodePaymentsProto()) continue;//版本号不合法
+        if(mnpair.second.nProtocolVersion < mnpayments.GetMinMasternodePaymentsProto()) continue;
 
         //it's in the list (up to 8 entries ahead of current block to allow propagation) -- so let's skip it
-        if(mnpayments.IsScheduled(mnpair.second, nBlockHeight)) continue;//在不在当前块之后8个中的最大vote
+        if(mnpayments.IsScheduled(mnpair.second, nBlockHeight)) continue;
 
         //it's too new, wait for a cycle
-        if(fFilterSigTime && mnpair.second.sigTime + (nMnCount*2.6*60) > GetAdjustedTime()) continue; //主节点必须等待一定时间 
+        if(fFilterSigTime && mnpair.second.sigTime + (nMnCount*2.6*60) > GetAdjustedTime()) continue;
 
         //make sure it has at least as many confirmations as there are masternodes
-        if(GetUTXOConfirmations(mnpair.first) < nMnCount) continue; //被其他节点认可的个数，不能少于总节点个数
+        if(GetUTXOConfirmations(mnpair.first) < nMnCount) continue;
 
         vecMasternodeLastPaid.push_back(std::make_pair(mnpair.second.GetLastPaidBlock(), &mnpair.second));
     }
@@ -538,14 +532,14 @@ bool CMasternodeMan::GetNextMasternodeInQueueForPayment(int nBlockHeight, bool f
     nCountRet = (int)vecMasternodeLastPaid.size();
 
     //when the network is in the process of upgrading, don't penalize nodes that recently restarted
-    if(fFilterSigTime && nCountRet < nMnCount/3)//如果有效的，小于总数的 /3 加入最新的，新加入的就不用等待
+    if(fFilterSigTime && nCountRet < nMnCount/3)
         return GetNextMasternodeInQueueForPayment(nBlockHeight, false, nCountRet, mnInfoRet);
 
     // Sort them low to high
-    sort(vecMasternodeLastPaid.begin(), vecMasternodeLastPaid.end(), CompareLastPaidBlock());//基本是根据您得到的费用，倒序
+    sort(vecMasternodeLastPaid.begin(), vecMasternodeLastPaid.end(), CompareLastPaidBlock());
 
     uint256 blockHash;
-    if(!GetBlockHash(blockHash, nBlockHeight - 101)) {//块高度必须大于 101
+    if(!GetBlockHash(blockHash, nBlockHeight - 101)) {
         LogPrintf("CMasternode::GetNextMasternodeInQueueForPayment -- ERROR: GetBlockHash() failed at nBlockHeight %d\n", nBlockHeight - 101);
         return false;
     }
@@ -558,7 +552,7 @@ bool CMasternodeMan::GetNextMasternodeInQueueForPayment(int nBlockHeight, bool f
     arith_uint256 nHighest = 0;
     CMasternode *pBestMasternode = NULL;
     BOOST_FOREACH (PAIRTYPE(int, CMasternode*)& s, vecMasternodeLastPaid){
-        arith_uint256 nScore = s.second->CalculateScore(blockHash);//找到和当前hash最近的
+        arith_uint256 nScore = s.second->CalculateScore(blockHash);
         if(nScore > nHighest){
             nHighest = nScore;
             pBestMasternode = s.second;

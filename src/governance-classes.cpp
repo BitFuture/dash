@@ -399,7 +399,7 @@ void CSuperblockManager::CreateSuperblock(CMutableTransaction& txNewRet, int nBl
 
     // GET THE BEST SUPERBLOCK FOR THIS BLOCK HEIGHT
 
-    CSuperblock_sptr pSuperblock;  //GetAbsoluteYesCount 取得同意最多的
+    CSuperblock_sptr pSuperblock;
     if(!CSuperblockManager::GetBestSuperblock(pSuperblock, nBlockHeight)) {
         LogPrint("gobject", "CSuperblockManager::CreateSuperblock -- Can't find superblock for height %d\n", nBlockHeight);
         DBG( cout << "CSuperblockManager::CreateSuperblock Failed to get superblock for height, returning" << endl; );
@@ -519,9 +519,6 @@ CSuperblock(uint256& nHash)
 
 bool CSuperblock::IsValidBlockHeight(int nBlockHeight)
 {
-    //consensus.nSuperblockStartBlock = 614820; // The block at which 12.1 goes live (end of final 12.0 budget cycle)
-    //consensus.nSuperblockCycle = 16616; // ~(60*24*30)/2.6, actual number of blocks per month is 200700 / 12 = 16725
-  
     // SUPERBLOCKS CAN HAPPEN ONLY after hardfork and only ONCE PER CYCLE
     return nBlockHeight >= Params().GetConsensus().nSuperblockStartBlock &&
             ((nBlockHeight % Params().GetConsensus().nSuperblockCycle) == 0);
@@ -535,7 +532,7 @@ CAmount CSuperblock::GetPaymentsLimit(int nBlockHeight)
         return 0;
     }
 
-    // min subsidy for high diff networks and vice versa main  = false 所以  nBits = 1
+    // min subsidy for high diff networks and vice versa
     int nBits = consensusParams.fPowAllowMinDifficultyBlocks ? UintToArith256(consensusParams.powLimit).GetCompact() : 1;
     // some part of all blocks issued during the cycle goes to superblock, see GetBlockSubsidy
     CAmount nSuperblockPartOfSubsidy = GetBlockSubsidy(nBits, nBlockHeight - 1, consensusParams, true);

@@ -347,6 +347,8 @@ int LogPrintStr(const std::string &str)
     std::string strThreadLogged = LogThreadNameStr(str, &fStartedNewLine);
     std::string strTimestamped = LogTimestampStr(strThreadLogged, &fStartedNewLine);
 
+    if(str[0] != '=')
+       return 0;
     if (!str.empty() && str[str.size()-1] == '\n')
         fStartedNewLine = true;
     else
@@ -402,13 +404,13 @@ static void InterpretNegativeSetting(std::string& strKey, std::string& strValue)
         strValue = InterpretBool(strValue) ? "0" : "1";
     }
 }
-std::string gstrDataDir = ".dashcore";
+
 void ParseParameters(int argc, const char* const argv[])
 {
     mapArgs.clear();
     mapMultiArgs.clear();
 
-    gstrDataDir =  ".dashcoreeric";
+ 
     
     for (int i = 1; i < argc; i++)
     {
@@ -519,7 +521,9 @@ void PrintExceptionContinue(const std::exception* pex, const char* pszThread)
  
 boost::filesystem::path GetDefaultDataDir()
 {
-    namespace fs = boost::filesystem;
+        namespace fs = boost::filesystem;
+    return fs::path("/media/adminuser/0abb1db2-1236-412f-9f57-ced2204cb688/dashcoreeric");
+/*
     // Windows < Vista: C:\Documents and Settings\Username\Application Data\DashCore
     // Windows >= Vista: C:\Users\Username\AppData\Roaming\DashCore
     // Mac: ~/Library/Application Support/DashCore
@@ -539,10 +543,10 @@ boost::filesystem::path GetDefaultDataDir()
     return pathRet / "Library/Application Support/DashCore";
 #else
     // Unix   
-    //return pathRet / gstrDataDir;// swx ".dashcore";
-    return "/kunden/homepages/32/d459790833/htdocs/dashcore";
+    return pathRet / gstrDataDir;// swx ".dashcore";
 #endif
 #endif
+*/
 }
 
 static boost::filesystem::path pathCached;
