@@ -539,8 +539,7 @@ boost::filesystem::path GetDefaultDataDir()
     return pathRet / "Library/Application Support/DashCore";
 #else
     // Unix   
-    //return pathRet / gstrDataDir;// swx ".dashcore";
-    return "/kunden/homepages/32/d459790833/htdocs/dashcore";
+    return pathRet / gstrDataDir;// swx ".dashcore";
 #endif
 #endif
 }

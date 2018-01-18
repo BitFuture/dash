@@ -119,7 +119,7 @@ UniValue getgenerate(const UniValue& params, bool fHelp)
     LOCK(cs_main);
     return GetBoolArg("-gen", DEFAULT_GENERATE);
 }
-
+//直接挖矿
 UniValue generate(const UniValue& params, bool fHelp)
 {
     if (fHelp || params.size() < 1 || params.size() > 1)
@@ -188,7 +188,7 @@ UniValue generate(const UniValue& params, bool fHelp)
     }
     return blockHashes;
 }
-
+//启动线程挖矿
 UniValue setgenerate(const UniValue& params, bool fHelp)
 {
     if (fHelp || params.size() < 1 || params.size() > 2)
