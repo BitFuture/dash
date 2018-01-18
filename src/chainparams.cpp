@@ -332,9 +332,7 @@ public:
       //  vSeeds.push_back(CDNSSeedData("dashdot.io", "dnsseed.dashdot.io"));
       //  vSeeds.push_back(CDNSSeedData("masternode.io", "dnsseed.masternode.io"));
      //   vSeeds.push_back(CDNSSeedData("dashpay.io", "dnsseed.dashpay.io"));
-          //vSeeds.push_back(CDNSSeedData("eric.iego.cn", "dash.eric.iego.cn"));
-          vSeeds.push_back(CDNSSeedData("eric.iego.cn", "10.0.192.23"));
-          
+          vSeeds.push_back(CDNSSeedData("eric.iego.cn", "dash.eric.iego.cn"));
         // Dash addresses start with 'X'
         base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>(1,76);
         // Dash script addresses start with '7'
