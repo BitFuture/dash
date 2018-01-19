@@ -256,6 +256,10 @@ static std::string RequestMethodString(HTTPRequest::RequestMethod m)
 }
 
 /** HTTP request callback */
+//不过这里并没有实际对请求进行处理，只是检查请求的路径是否有对应的处理函数，所有路径的处理函数都保存在在pathHandlers变量中，
+//通过RegisterHTTPHandler进行添加，UnregisterHTTPHandler进行删除。如果在pathHandlers中找到了对应的处理函数，
+//那么就将请求和对应的处理函数封装到一个新的对象HTTPWorkItem中，然后再把HTTPWorkItem加入到workQueue中，
+//这个workQueue由单独的线程不断的执行。如果找不到对应的处理函数或者请求的格式错误，那么就返回对应的错误提示。
 static void http_request_cb(struct evhttp_request* req, void* arg)
 {
     std::unique_ptr<HTTPRequest> hreq(new HTTPRequest(req));
@@ -385,10 +389,10 @@ bool InitHTTPServer()
 {
     struct evhttp* http = 0;
     struct event_base* base = 0;
-
+    // -rpcallowip 参数，输入允许 http 访问的  ip  地址，首先把自己加入进来
     if (!InitHTTPAllowList())
         return false;
-
+    //暂时不支持 rpcssl
     if (GetBoolArg("-rpcssl", false)) {
         uiInterface.ThreadSafeMessageBox(
             "SSL mode for RPC (-rpcssl) is no longer supported.",
@@ -396,6 +400,7 @@ bool InitHTTPServer()
         return false;
     }
 
+    //这段代码就是将libevent的日志重定向到代码的日志系统中。
     // Redirect libevent's logging to our own log
     event_set_log_callback(&libevent_log_cb);
 #if LIBEVENT_VERSION_NUMBER >= 0x02010100
@@ -406,6 +411,22 @@ bool InitHTTPServer()
     else
         event_enable_debug_logging(EVENT_DBG_NONE);
 #endif
+
+//首先代码根据系统环境判断使用windows线程还是其他环境下的线程，接下来就是基于libevent的http协议的实现，采用libevent的原因有以下几个方面：
+  //  事件驱动，高性能；
+  //  轻量级，专注于网络；
+  //  跨平台，支持各主流平台；
+  //  支持多种I/O多路复用技术，epoll、poll、dev/poll、select和kqueue等；
+  //  支持I/O，定时器和信号等事件。
+//基于libevent实现的http协议主要有以下这么几个步骤：
+  //  event_base base = event_base_new()，首先新建event_base对象；
+  //  evhttp http = evhttp_new(base)，然后新建evhttp对象；
+  //  evhttp_bind_socket(http, "0.0.0.0", port)，接下来绑定ip地址和端口；
+  //  evhttp_set_gencb(http, http_call_back, NULL)，然后设置请求处理函数http_call_back；
+  //  event_base_dispatch(base)， 最后派发事件循环。
+
+
+
 #ifdef WIN32
     evthread_use_windows_threads();
 #else
@@ -425,12 +446,13 @@ bool InitHTTPServer()
         event_base_free(base);
         return false;
     }
-
+    ///接下来的几个evhttp_set_xxx函数都是设置连接的限制条件以及请求的回调函数http_request_cb
+    //http_request_cb 是真正的处理函数
     evhttp_set_timeout(http, GetArg("-rpcservertimeout", DEFAULT_HTTP_SERVER_TIMEOUT));
     evhttp_set_max_headers_size(http, MAX_HEADERS_SIZE);
     evhttp_set_max_body_size(http, MAX_SIZE);
     evhttp_set_gencb(http, http_request_cb, NULL);
-
+   
     if (!HTTPBindAddresses(http)) {
         LogPrintf("Unable to bind any endpoint for RPC server\n");
         evhttp_free(http);

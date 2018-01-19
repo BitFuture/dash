@@ -49,7 +49,9 @@ static void noui_InitMessage(const std::string& message)
 {
     LogPrintf("init message: %s\n", message);
 }
-
+//这里涉及到我们之前讲到的Boost信号/插槽机制
+//信号触发的时候，这些连接的函数都会被调用
+//主要是不同上层应用，可以定义自己的信号处理函数
 void noui_connect()
 {
     // Connect dashd signal handlers

@@ -160,6 +160,19 @@ UniValue CallRPC(const string& strMethod, const UniValue& params)
     std::string host = GetArg("-rpcconnect", DEFAULT_RPCCONNECT);
     int port = GetArg("-rpcport", BaseParams().RPCPort());
 
+//什么是RAII 技术？
+//我们在C++中经常使用new申请了内存空间，但是却也经常忘记delete回收申请的空间，容易造成内存溢出，于是RAII技术就诞生了，来解决这样的问题。
+//RAII（Resource Acquisition Is Initialization）机制是Bjarne Stroustrup首先提出的，是一种利用对象生命周期来控制程序资源（如内存、文件句柄、网络连接、互斥量等等）的简单技术。
+// 我们知道在函数内部的一些成员是放置在栈空间上的，当函数返回时，这些栈上的局部变量就会立即释放空间，
+// 于是Bjarne Stroustrup就想到确保能运行资源释放代码的地方就是在这个程序段（栈）中放置的对象的析构函数了，
+// 因为stack winding会保证它们的析构函数都会被执行。RAII就利用了栈里面的变量的这一特点。
+ //RAII 的一般做法是这样的：在对象构造时获取资源，接着控制对资源的访问使之在对象的生命周期内始终保持有效，最后在对象析构的时候释放资源。
+ //借此，我们实际上把管理一份资源的责任托管给了一个存放在栈空间上的局部对象。
+//这种做法有两大好处：
+//(1)不需要显式地释放资源。
+//(2)采用这种方式，对象所需的资源在其生命期内始终保持有效。
+//raii就是为了避免申请内存但是没有释放从而导致内存泄漏的情况出现所使用的一种技术，这种技术能够在对象离开作用域是自动释放。
+
     // Create event base
     struct event_base *base = event_base_new(); // TODO RAII
     if (!base)

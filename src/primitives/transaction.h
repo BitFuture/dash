@@ -11,19 +11,23 @@
 #include "serialize.h"
 #include "uint256.h"
 
-/** An outpoint - a combination of a transaction hash and an index n into its vout */
+/** An outpoint - a combination of a transaction hash and an index n into its vout 
+* COutPoint主要用在交易的输入CTxIn中，用来确定当前输出的来源，
+* 包括前一笔交易的hash，以及对应前一笔交易中的第几个输出的序列号。
+*/
 class COutPoint
 {
 public:
-    uint256 hash;
-    uint32_t n;
+    uint256 hash;// 交易的哈希
+    uint32_t n;// 对应的序列号
 
     COutPoint() { SetNull(); }
     COutPoint(uint256 hashIn, uint32_t nIn) { hash = hashIn; n = nIn; }
 
+    //定义　　GetSerializeSize  Serialize  Unserialize　实际调用　SerializationOp
     ADD_SERIALIZE_METHODS;
 
-    template <typename Stream, typename Operation>
+    template <typename Stream, typename Operation>//数据读写　根据　ser_action　来
     inline void SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
         READWRITE(hash);
         READWRITE(n);
@@ -47,37 +51,44 @@ public:
         return !(a == b);
     }
 
-    std::string ToString() const;
-    std::string ToStringShort() const;
+    std::string ToString() const;       //hash 加　n
+    std::string ToStringShort() const; //hash 前　６４位　加　n
 };
 
 /** An input of a transaction.  It contains the location of the previous
  * transaction's output that it claims and a signature that matches the
  * output's public key.
+ * 交易的输入，包括当前输入对应前一笔交易的输出的位置，以及花费前一笔输出需要的签名脚本
+ * CScriptWitness是用来支持隔离见证时使用的。
  */
 class CTxIn
 {
 public:
-    COutPoint prevout;
-    CScript scriptSig;
-    uint32_t nSequence;
+    COutPoint prevout;// 前一笔交易输出的位置
+    CScript scriptSig;// 解锁脚本
+    uint32_t nSequence; // 序列号
+    // CScriptWitness scriptWitness;隔离见证
 
     /* Setting nSequence to this value for every input in a transaction
-     * disables nLockTime. */
+     * disables nLockTime. 
+     * 规则1：如果一笔交易中所有的SEQUENCE_FINAL都被赋值了相应的nSequence，那么nLockTime就会被禁用*/
     static const uint32_t SEQUENCE_FINAL = 0xffffffff;
 
     /* Below flags apply in the context of BIP 68*/
     /* If this flag set, CTxIn::nSequence is NOT interpreted as a
-     * relative lock-time. */
+     * relative lock-time. 
+     * 规则2：如果设置了这个变量，那么规则1就失效了*/
     static const uint32_t SEQUENCE_LOCKTIME_DISABLE_FLAG = (1 << 31);
 
     /* If CTxIn::nSequence encodes a relative lock-time and this flag
      * is set, the relative lock-time has units of 512 seconds,
-     * otherwise it specifies blocks with a granularity of 1. */
+     * otherwise it specifies blocks with a granularity of 1. 
+     * 规则3：如果规则1有效并且设置了此变量，那么相对锁定时间就为512秒，否则锁定时间就为1个区块*/
     static const uint32_t SEQUENCE_LOCKTIME_TYPE_FLAG = (1 << 22);
 
     /* If CTxIn::nSequence encodes a relative lock-time, this mask is
-     * applied to extract that lock-time from the sequence field. */
+     * applied to extract that lock-time from the sequence field.  
+     * 规则4：如果规则1有效，那么这个变量就用来从nSequence计算对应的锁定时间*/
     static const uint32_t SEQUENCE_LOCKTIME_MASK = 0x0000ffff;
 
     /* In order to use the same number of bits to encode roughly the
@@ -93,7 +104,7 @@ public:
     {
         nSequence = SEQUENCE_FINAL;
     }
-
+    // 禁用隐式转换，构造函数必须明确使用当前形式
     explicit CTxIn(COutPoint prevoutIn, CScript scriptSigIn=CScript(), uint32_t nSequenceIn=SEQUENCE_FINAL);
     CTxIn(uint256 hashPrevTx, uint32_t nOut, CScript scriptSigIn=CScript(), uint32_t nSequenceIn=SEQUENCE_FINAL);
 
@@ -128,12 +139,13 @@ public:
 
 /** An output of a transaction.  It contains the public key that the next input
  * must be able to sign with to claim it.
+ * 交易的输出，包含金额和锁定脚本
  */
 class CTxOut
 {
 public:
-    CAmount nValue;
-    CScript scriptPubKey;
+    CAmount nValue; // 输出金额
+    CScript scriptPubKey; // 锁定脚本
     int nRounds;
 
     CTxOut()
@@ -164,7 +176,7 @@ public:
     }
 
     uint256 GetHash() const;
-
+    // 获取dust阈值，一笔交易如果交易费小于dust阈值，就会被认为是dust tx，   僵尸微小的
     CAmount GetDustThreshold(const CFeeRate &minRelayTxFee) const
     {
         // "Dust" is defined in terms of CTransaction::minRelayTxFee, which has units duffs-per-kilobyte.
@@ -174,14 +186,14 @@ public:
         // and that means that fee per spendable txout is 182 * 10000 / 1000 = 1820 duffs.
         // So dust is a spendable txout less than 546 * minRelayTxFee / 1000 (in duffs)
         // i.e. 1820 * 3 = 5460 duffs with default -minrelaytxfee = minRelayTxFee = 10000 duffs per kB.
-        if (scriptPubKey.IsUnspendable())
+        if (scriptPubKey.IsUnspendable()) // 判断脚本格式是否正确
             return 0;
 
         size_t nSize = GetSerializeSize(SER_DISK,0)+148u;
-        return 3*minRelayTxFee.GetFee(nSize);
+        return 3*minRelayTxFee.GetFee(nSize);//out + in  size计算的最小费用 ×3
     }
 
-    bool IsDust(const CFeeRate &minRelayTxFee) const
+    bool IsDust(const CFeeRate &minRelayTxFee) const //输出本省比最小费用还小
     {
         return (nValue < GetDustThreshold(minRelayTxFee));
     }
@@ -205,16 +217,17 @@ struct CMutableTransaction;
 
 /** The basic transaction that is broadcasted on the network and contained in
  * blocks.  A transaction can contain multiple inputs and outputs.
+ * 下面就是在网络中广播然后被打包进区块的最基本的交易的结构，一个交易可能包含多个交易输入和输出。
  */
 class CTransaction
 {
 private:
     /** Memory only. */
-    const uint256 hash;
-    void UpdateHash() const;
+    const uint256 hash; //交易的hash
+    void UpdateHash() const; //根据当前数据，计算当前交易的 hash  CHashWriter
 
 public:
-    // Default transaction version.
+    // Default transaction version. // Default transaction version. 默认交易版本
     static const int32_t CURRENT_VERSION=1;
 
     // Changing the default transaction version requires a two step process: first
@@ -228,10 +241,12 @@ public:
     // actually immutable; deserialization and assignment are implemented,
     // and bypass the constness. This is safe, as they update the entire
     // structure, including the hash.
-    const int32_t nVersion;
-    const std::vector<CTxIn> vin;
-    const std::vector<CTxOut> vout;
-    const uint32_t nLockTime;
+    /** 下面这些变量都被定义为常量类型，从而避免无意识的修改了交易而没有更新缓存的hash值；
+    * 但还是可以通过重新构造一个交易然后赋值给当前交易来进行修改，这样就更新了交易的所有内容 */
+    const int32_t nVersion;// 版本
+    const std::vector<CTxIn> vin; // 交易输入
+    const std::vector<CTxOut> vout;// 交易输出
+    const uint32_t nLockTime;// 锁定时间
 
     /** Construct a CTransaction that qualifies as IsNull() */
     CTransaction();
@@ -250,7 +265,7 @@ public:
         READWRITE(*const_cast<std::vector<CTxIn>*>(&vin));
         READWRITE(*const_cast<std::vector<CTxOut>*>(&vout));
         READWRITE(*const_cast<uint32_t*>(&nLockTime));
-        if (ser_action.ForRead())
+        if (ser_action.ForRead()) //如果是读入数据，重新计算 hash 这个不存盘
             UpdateHash();
     }
 
@@ -262,23 +277,24 @@ public:
         return hash;
     }
 
-    // Return sum of txouts.
-    CAmount GetValueOut() const;
+    // Return sum of txouts.// 返回交易输出金额之和 注意比较最大和最小
+    CAmount GetValueOut() const;  
     // GetValueIn() is a method on CCoinsViewCache, because
     // inputs must be known to compute value in.
 
     // Compute priority, given priority of inputs and (optionally) tx size
+    // 计算优先级别 CalculateModifiedSize/nTxSize  dPriorityInputs 实际没用。
     double ComputePriority(double dPriorityInputs, unsigned int nTxSize=0) const;
 
     // Compute modified tx size for priority calculation (optionally given tx size)
-    unsigned int CalculateModifiedSize(unsigned int nTxSize=0) const;
+    unsigned int CalculateModifiedSize(unsigned int nTxSize=0) const;//计算除常规大小外，所有输入的增量
     
     /**
      * Get the total transaction size in bytes, including witness data.
      * "Total Size" defined in BIP141 and BIP144.
      * @return Total transaction size in bytes
      */
-    unsigned int GetTotalSize() const;
+    unsigned int GetTotalSize() const;  //总大小
 
     bool IsCoinBase() const
     {

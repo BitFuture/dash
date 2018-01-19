@@ -74,12 +74,12 @@ class CBlock : public CBlockHeader
 {
 public:
     // network and disk
-    std::vector<CTransaction> vtx;
+    std::vector<CTransaction> vtx;  // 所有的交易
 
-    // memory only
+    // memory only   mutalbe的中文意思是“可变的，易变的”，跟constant（既C++中的const）是反义词。在C++中，mutable也是为了突破const的限制而设置的。被mutable修饰的变量(mutable只能由于修饰类的非静态数据成员)，将永远处于可变的状态，即使在一个const函数中。
     mutable CTxOut txoutMasternode; // masternode payment
     mutable std::vector<CTxOut> voutSuperblock; // superblock payment
-    mutable bool fChecked;
+    mutable bool fChecked; // 交易是否验证过并构成Merkle树
 
     CBlock()
     {

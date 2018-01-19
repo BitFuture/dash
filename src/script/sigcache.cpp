@@ -70,6 +70,8 @@ public:
 
     void Set(const uint256& entry)
     {
+        //-maxsigcachesize=<n>：限制signature cache的大小为n MiB，默认值为32.
+        
         size_t nMaxCacheSize = GetArg("-maxsigcachesize", DEFAULT_MAX_SIG_CACHE_SIZE) * ((size_t) 1 << 20);
         if (nMaxCacheSize <= 0) return;
 

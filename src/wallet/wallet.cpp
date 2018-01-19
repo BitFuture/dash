@@ -3615,7 +3615,7 @@ DBErrors CWallet::LoadWallet(bool& fFirstRunRet)
     {
         LOCK2(cs_main, cs_wallet);
         for (auto& pair : mapWallet) {
-            for(int i = 0; i < pair.second.vout.size(); ++i) {
+            for(unsigned int i = 0; i < pair.second.vout.size(); ++i) {
                 if (IsMine(pair.second.vout[i]) && !IsSpent(pair.first, i)) {
                     setWalletUTXO.insert(COutPoint(pair.first, i));
                 }

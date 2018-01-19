@@ -66,6 +66,12 @@ private:
     unsigned int nBatchSize;
 
     /** Internal function that does bulk of the verification work. */
+    //这里面总共有两种角色，Master和Worker，其中Master负责统计结果，Worker负责执行具体的脚本验证。
+    //从源码的执行顺序来看，首先在AppInitMain中执行Thread()函数，也就是创建Worker，此时任务队列queue为空，
+    //所有的Worker创建后都在cond.wait(lock)处阻塞，等到有新的任务被加到queue中时，才会被唤醒批量执行任务；
+    //最后调用Wait()函数创建一个Master，等待所有的Worker执行完，统计执行结果并返回。
+    //其中scriptSig就是用户的签名也是解锁脚本，witness是隔离见证中从scriptSig中分离出来的，
+    //scriptPubKey也就是锁定脚本，然后调用VerifyScript来验证锁定脚本和解锁脚本是否能正确结合运行
     bool Loop(bool fMaster = false)
     {
         boost::condition_variable& cond = fMaster ? condMaster : condWorker;

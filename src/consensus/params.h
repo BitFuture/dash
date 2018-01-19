@@ -9,7 +9,7 @@
 #include "uint256.h"
 #include <map>
 #include <string>
-
+//共识参数
 namespace Consensus {
 
 enum DeploymentPos
@@ -40,15 +40,18 @@ struct BIP9Deployment {
 /**
  * Parameters that influence chain consensus.
  */
+/**
+ * 影响共识的参数
+ */
 struct Params {
-    uint256 hashGenesisBlock;
-    int nSubsidyHalvingInterval;
-    int nMasternodePaymentsStartBlock;
-    int nMasternodePaymentsIncreaseBlock;
-    int nMasternodePaymentsIncreasePeriod; // in blocks
-    int nInstantSendKeepLock; // in blocks
-    int nBudgetPaymentsStartBlock;
-    int nBudgetPaymentsCycleBlocks;
+    uint256 hashGenesisBlock;// 创世区块的hash
+    int nSubsidyHalvingInterval;//矿工奖励递减的高度间隔 dash为一年减少 /14
+    int nMasternodePaymentsStartBlock; //主节点开始奖励的块高度
+    int nMasternodePaymentsIncreaseBlock;//主节点递减参数
+    int nMasternodePaymentsIncreasePeriod; //主节点递减参数  in blocks
+    int nInstantSendKeepLock; // 快速交易锁定区块高度  in blocks
+    int nBudgetPaymentsStartBlock;//
+    int nBudgetPaymentsCycleBlocks;//每隔30天奖励一次
     int nBudgetPaymentsWindowBlocks;
     int nBudgetProposalEstablishingTime; // in seconds
     int nSuperblockStartBlock;
@@ -57,11 +60,11 @@ struct Params {
     int nGovernanceFilterElements;
     int nMasternodeMinimumConfirmations;
     /** Used to check majorities for block version upgrade */
-    int nMajorityEnforceBlockUpgrade;
+    int nMajorityEnforceBlockUpgrade;  //对块，往前数1000个，当950个版本都大于某个值的时候，矿工该升级了
     int nMajorityRejectBlockOutdated;
     int nMajorityWindow;
     /** Block height and hash at which BIP34 becomes active */
-    int BIP34Height;
+    int     BIP34Height;  //到某个高度，这个标准激活
     uint256 BIP34Hash;
     /**
      * Minimum blocks including miner confirmation of the total of nMinerConfirmationWindow blocks in a retargetting period,
@@ -69,21 +72,27 @@ struct Params {
      * Default BIP9Deployment::nThreshold value for deployments where it's not specified and for unknown deployments.
      * Examples: 1916 for 95%, 1512 for testchains.
      */
+      /**
+     * 在2016个区块中至少要有多少个区块被矿工确认，规则改变才能生效
+     * 在BIP9上线时还使用(nPowTargetTimespan / nPowTargetSpacing)值
+     * Examples: 1916 for 95%, 1512 for testchains.
+     */
     uint32_t nRuleChangeActivationThreshold;
     // Default BIP9Deployment::nWindowSize value for deployments where it's not specified and for unknown deployments.
     uint32_t nMinerConfirmationWindow;
     BIP9Deployment vDeployments[MAX_VERSION_BITS_DEPLOYMENTS];
     /** Proof of work parameters */
-    uint256 powLimit;
-    bool fPowAllowMinDifficultyBlocks;
-    bool fPowNoRetargeting;
-    int64_t nPowTargetSpacing;
-    int64_t nPowTargetTimespan;
+    /** POW参数 */
+    uint256 powLimit;// 最小难度
+    bool fPowAllowMinDifficultyBlocks;//是否允许最低难度
+    bool fPowNoRetargeting;// 不调整难度
+    int64_t nPowTargetSpacing; // 区块产生平均时间   2.5 * 60
+    int64_t nPowTargetTimespan;// 难度调整时间 一天 
     int nPowKGWHeight;
     int nPowDGWHeight;
-    int64_t DifficultyAdjustmentInterval() const { return nPowTargetTimespan / nPowTargetSpacing; }
-    uint256 nMinimumChainWork;
-    uint256 defaultAssumeValid;
+    int64_t DifficultyAdjustmentInterval() const { return nPowTargetTimespan / nPowTargetSpacing; } //每1天调整一次难度
+    uint256 nMinimumChainWork;// 当前难度最小值  有效区块，必须包含这个
+    uint256 defaultAssumeValid; // 在此区块之前的区块都认为是有效的
 };
 } // namespace Consensus
 

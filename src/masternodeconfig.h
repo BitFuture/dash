@@ -8,7 +8,7 @@
 
 class CMasternodeConfig;
 extern CMasternodeConfig masternodeConfig;
-
+//主节点配置
 class CMasternodeConfig
 {
 
@@ -17,10 +17,10 @@ public:
     class CMasternodeEntry {
 
     private:
-        std::string alias;
-        std::string ip;
+        std::string alias;  //别名
+        std::string ip;     //ip 
         std::string privKey;
-        std::string txHash;
+        std::string txHash; 
         std::string outputIndex;
     public:
 

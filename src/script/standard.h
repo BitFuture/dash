@@ -41,6 +41,14 @@ extern unsigned nMaxDatacarrierBytes;
  * details.
  */
 static const unsigned int MANDATORY_SCRIPT_VERIFY_FLAGS = SCRIPT_VERIFY_P2SH;
+//
+//交易类型 	描述
+//TX_NONSTANDARD 	非标准的交易
+//TX_PUBKEY   	公钥
+//TX_PUBKEYHASH 	公钥哈希
+//TX_SCRIPTHASH 	脚本哈希
+//TX_MULTISIG 	多重签名
+//TX_NULL_DATA 	空数据
 
 enum txnouttype
 {

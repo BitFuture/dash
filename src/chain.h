@@ -151,23 +151,29 @@ enum BlockStatus {
  * candidates to be the next block. A blockindex may have multiple pprev pointing
  * to it, but at most one of them can be part of the currently active branch.
  */
+/** 
+ * 网络中的节点不断收集新的交易，然后一个Merkle树的形式打包进区块中，
+ * 打包的过程就是要完成工作量证明的要求，当节点解出了当前的随机数时，
+ * 它就把当前的区块广播到其他所有节点，并且加到区块链上。
+ * 区块中的第一笔交易称之为CoinBase交易，是产生的新币，发送给区块的产生者
+ */
 class CBlockIndex
 {
 public:
     //! pointer to the hash of the block, if any. Memory is owned by this CBlockIndex
-    const uint256* phashBlock;
+    const uint256* phashBlock;   //当前hash的指针，使用者可以跟着变
 
     //! pointer to the index of the predecessor of this block
-    CBlockIndex* pprev;
+    CBlockIndex* pprev;//前一区块
 
     //! pointer to the index of some further predecessor of this block
     CBlockIndex* pskip;
 
     //! height of the entry in the chain. The genesis block has height 0
-    int nHeight;
+    int nHeight;//区块高度
 
     //! Which # file this block is stored in (blk?????.dat)
-    int nFile;
+    int nFile;//区块保存的文件
 
     //! Byte offset within blk?????.dat where this block's data is stored
     unsigned int nDataPos;
@@ -176,29 +182,29 @@ public:
     unsigned int nUndoPos;
 
     //! (memory only) Total amount of work (expected number of hashes) in the chain up to and including this block
-    arith_uint256 nChainWork;
+    arith_uint256 nChainWork; //工作量相关递增的数
 
     //! Number of transactions in this block.
     //! Note: in a potential headers-first mode, this number cannot be relied upon
-    unsigned int nTx;
+    unsigned int nTx;//总交易量
 
     //! (memory only) Number of transactions in the chain up to and including this block.
     //! This value will be non-zero only if and only if transactions for this block and all its parents are available.
     //! Change to 64-bit type when necessary; won't happen before 2030
-    unsigned int nChainTx;
+    int64_t nChainTx;//?????
 
     //! Verification status of this block. See enum BlockStatus
     unsigned int nStatus;
 
-    //! block header
-    int nVersion;
-    uint256 hashMerkleRoot;
-    unsigned int nTime;
-    unsigned int nBits;
-    unsigned int nNonce;
-
-    //! (memory only) Sequential id assigned to distinguish order in which blocks are received.
+ //! (memory only) Sequential id assigned to distinguish order in which blocks are received.
     uint32_t nSequenceId;
+
+    //! block header
+    int nVersion;            // 版本
+    uint256 hashMerkleRoot;  // Merkle树根
+    int64_t      nTime;      // 时间戳
+    unsigned int nBits;      // POW难度
+    unsigned int nNonce;     // 要找的随机数   
 
     void SetNull()
     {
@@ -281,7 +287,7 @@ public:
 
     enum { nMedianTimeSpan=11 };
 
-    int64_t GetMedianTimePast() const
+    int64_t GetMedianTimePast() const //从当前往前11个块，中间块的时间戳
     {
         int64_t pmedian[nMedianTimeSpan];
         int64_t* pbegin = &pmedian[nMedianTimeSpan];

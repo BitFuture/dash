@@ -223,6 +223,18 @@ static void DebugPrintInit()
     vMsgsBeforeOpenLog = new list<string>;
 }
 
+//boost::call_once表示在多线程访问该语句时始终只执行一次调用的函数，其中第一个参数是被调用的函数地址，第二个参数类型为boost::once_flag，
+//代码中使用的是debugPrintInitFlag，该变量的定义为，
+//static boost::once_flag debugPrintInitFlag = BOOST_ONCE_INIT;
+//在函数DebugPrintInit()中定义了变量mutexDebugLog，类型为boost::mutex::scoped_lock，用来保证函数中后续代码是线程安全的，scoped_lock， 能够保证在作用域范围内是互斥访问的，离开作用域时由析构函数自动解锁。
+// 如果按照简单的代码执行顺序来看，在DebugPrintInit()中创建了对象vMsgsBeforeOpenLog，类型为链表，这时链表肯定是空的；
+// 而到了OpenDebugLog()函数中直接有个while将vMsgsBeforeOpenLog中的字符串写入到fileout中，空链表有什么好写的？
+// 但是用gbd调试程序时，运行到这里发现vMsgsBeforeOpenLog竟然不是空的！
+//LogPrintStr()
+//从上面代码可以发现这里也调用了DebugPrintInit()这个函数，
+//所以远在OpenDebugLog()之前，vMsgsBeforeOpenLog变量就已经创建了，然后LogPrintStr在之后又被调用了很多次，
+//每次都会往vMsgsBeforeOpenLog中写入一些东西，所以到OpenDebugLog()时该变量已经有内容了。
+
 void OpenDebugLog()
 {
     boost::call_once(&DebugPrintInit, debugPrintInitFlag);
@@ -243,7 +255,7 @@ void OpenDebugLog()
     delete vMsgsBeforeOpenLog;
     vMsgsBeforeOpenLog = NULL;
 }
-
+//判断那些日志可以输出
 bool LogAcceptCategory(const char* category)
 {
     if (category != NULL)
@@ -627,7 +639,7 @@ boost::filesystem::path GetMasternodeConfigFile()
     if (!pathConfigFile.is_complete()) pathConfigFile = GetDataDir() / pathConfigFile;
     return pathConfigFile;
 }
-
+//读配置文件
 void ReadConfigFile(map<string, string>& mapSettingsRet,
                     map<string, vector<string> >& mapMultiSettingsRet)
 {
@@ -909,6 +921,7 @@ void SetupEnvironment()
 {
     // On most POSIX systems (e.g. Linux, but not BSD) the environment's locale
     // may be invalid, in which case the "C" locale is used as fallback.
+    // locale()是设置系统区域，这将决定程序所使用的当前语言编码、日期格式、数字格式及其它与区域有关的设置
 #if !defined(WIN32) && !defined(MAC_OSX) && !defined(__FreeBSD__) && !defined(__OpenBSD__)
     try {
         std::locale(""); // Raises a runtime error if current locale is invalid
@@ -920,6 +933,7 @@ void SetupEnvironment()
     // in multithreading environments, it is set explicitly by the main thread.
     // A dummy locale is used to extract the internal default locale, used by
     // boost::filesystem::path, which is then used to explicitly imbue the path.
+    //文件路径的本地化设置，主要设计宽字符(Wide char)和多字节(Multi bytes)之间的转换问题
     std::locale loc = boost::filesystem::path::imbue(std::locale::classic());
     boost::filesystem::path::imbue(loc);
 }
