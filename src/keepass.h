@@ -14,7 +14,7 @@ class CKeePassIntegrator;
 static const unsigned int DEFAULT_KEEPASS_HTTP_PORT     = 19455;
 
 extern CKeePassIntegrator keePassInt;
-
+//KeePass 是一款开源的密码管理器
 class CKeePassIntegrator {
 private:
     static const int KEEPASS_CRYPTO_KEY_SIZE            = 32;

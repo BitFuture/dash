@@ -226,9 +226,17 @@ bool StartHTTPRPC()
     LogPrint("rpc", "Starting HTTP RPC server\n");
     if (!InitRPCAuthentication())
         return false;
-
+    //过RegisterHTTPHandler来注册url处理函数，这个函数的第一个参数是请求的路径，第二个是精确匹配还是前缀匹配，最后一个参数是处理的函数。 
+    //而RegisterHTTPHandler就是将参数存储到这个变量当中。
     RegisterHTTPHandler("/", true, HTTPReq_JSONRPC);
 
+   //EventBase()返回一个event_base对象，这个对象名称为eventBase，
+   // 后续所有的event的创建都需要这个对象作为其中的一个参数。所以接下来的代码通过一个assert判断eventBase是否为空
+   //，从而为以后的调试更好的找出原因。
+   //在接下来一句代码创建了一个HTTPRPCTimerInterface对象
+   //传入一个event_base*对象，类中的主要的函数就是NewTimer函数，功能也非常简单，就是在指定时间间隔后执行某个函数一次。
+   //最后通过RPCSetTimerInterface函数将新生成的httpRPCTimerInterface变量传到了httpserver中的RPCTimerInterface类型的timerInterface变量中去，
+   //之后主要有timerInterface变量来形式功能。
     assert(EventBase());
     httpRPCTimerInterface = new HTTPRPCTimerInterface(EventBase());
     RPCRegisterTimerInterface(httpRPCTimerInterface);

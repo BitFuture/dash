@@ -684,6 +684,11 @@ struct CImportingNow
 // rev files since they'll be rewritten by the reindex anyway.  This ensures that vinfoBlockFile
 // is in sync with what's actually on disk by the time we start downloading, so that pruning
 // works correctly.
+//如果我们将-reindex和-prune一起用，那么就将重索引时不考虑的一些区块文件直接删除。
+//因为重索引是从0号区块一直连续的读取，直到某一个区块信息缺失就停止读取，缺失的区块之后所有的区块都会被直接删除。
+//同时还需要删除rev文件，因为这些文件在重索引时会重新生成，
+//这个函数要做的就是删除某个缺失的区块之后所有的区块数据，以及rev开头的文件。 
+//先将所有的文件和对应的路径保存到一个map中，然后用一个变量nContigCounter从0开始计数，直到遇到第一个不一致的文件名，就从这个开始删除
 void CleanupBlockRevFiles()
 {
     using namespace boost::filesystem;
@@ -809,6 +814,7 @@ bool AppInitServers(boost::thread_group& threadGroup)
         return false;
     if (!StartRPC())
         return false;
+    //RPC Server首先要验证用户的身份，是通过InitRPCAuthentication来实现的
     if (!StartHTTPRPC())
         return false;
     if (GetBoolArg("-rest", DEFAULT_REST_ENABLE) && !StartREST())
@@ -1415,7 +1421,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
     if (!fDisableWallet) {
         std::string strWarning;
         std::string strError;
-
+        //-createwalletbackups 自动备份钱包
         nWalletBackups = GetArg("-createwalletbackups", 10);
         nWalletBackups = std::max(0, std::min(10, nWalletBackups));
 
@@ -1431,7 +1437,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
 
         // reset warning string
         strWarning = "";
-
+        //钱包校验和检查，恢复错误钱包
         if (!CWallet::Verify(strWalletFile, strWarning, strError))
             return false;
 
@@ -1442,25 +1448,36 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
 
 
         // Initialize KeePass Integration
+        //KeePass 是一款开源的密码管理器
         keePassInt.init();
 
     } // (!fDisableWallet)
 #endif // ENABLE_WALLET
-    // ********************************************************* Step 6: network initialization
+    // *********************************************************
+    // Step 6: network initialization
     // Note that we absolutely cannot open any actual connections
     // until the very end ("start node") as the UTXO/block state
     // is not yet setup and may end up being set up twice if we
     // need to reindex later.
+   //只有在最后Start node的时候才能进行实际的网络连接，也就是说这一段还是进行一些参数的设置，并不会实际开启连接，
+   //原因是区块的状态还没有配置好并且，如果后面设置了重新索引，那么区块的状态就会被设置两次
 
     assert(!g_connman);
     g_connman = std::unique_ptr<CConnman>(new CConnman());
     CConnman& connman = *g_connman;
 
     peerLogic.reset(new PeerLogicValidation(&connman));
+    //注册节点之间的消息处理信号
     RegisterValidationInterface(peerLogic.get());
+    //注册节点信号
+    // ProcessMessages);
+    // SendMessages);
+    // InitializeNode);
+    // FinalizeNode);
     RegisterNodeSignals(GetNodeSignals());
 
     // sanitize comments per BIP-0014, format user agent and check total size
+    //-uacomment：给用户代理字符串添加注释。
     std::vector<string> uacomments;
     BOOST_FOREACH(string cmt, mapMultiArgs["-uacomment"])
     {
@@ -1474,6 +1491,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
             strSubVersion.size(), MAX_SUBVERSION_LENGTH));
     }
 
+     //-onlynet：只连接特定网络中的节点，取值有NET_UNROUTABLE,NET_IPV4,NET_IPV6,NET_TOR,NET_INTERNAL几种。
     if (mapArgs.count("-onlynet")) {
         std::set<enum Network> nets;
         BOOST_FOREACH(const std::string& snet, mapMultiArgs["-onlynet"]) {
@@ -1488,7 +1506,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
                 SetLimited(net);
         }
     }
-
+    //-whitelist 连接指定白名单
     if (mapArgs.count("-whitelist")) {
         BOOST_FOREACH(const std::string& net, mapMultiArgs["-whitelist"]) {
             CSubNet subnet;
@@ -1498,7 +1516,10 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
             connman.AddWhitelistedRange(subnet);
         }
     }
-
+    //代理设置
+    //-dns：允许进行dns解析，默认为1.
+    //-proxyrandomize：为每个代理连接都随机颁发一个证书，默认为1.
+    //-proxy：为网络所有的通信设置一个代理，默认为空。
     bool proxyRandomize = GetBoolArg("-proxyrandomize", DEFAULT_PROXYRANDOMIZE);
     // -proxy sets a proxy for all outgoing network traffic
     // -noproxy (or -proxy=0) as well as the empty string can be used to not set a proxy, this is the default
@@ -1517,6 +1538,8 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
         SetLimited(NET_TOR, false); // by default, -proxy sets onion as reachable, unless -noonion later
     }
 
+    //设置洋葱路由
+    //如果-onion!="" && != "0"那么跟设置代理类似，首先解析域名，启用洋葱路由。
     // -onion can be used to set only a proxy for .onion, or override normal proxy for .onion addresses
     // -noonion (or -onion=0) disables connecting to .onion entirely
     // An empty string is used to not override the onion proxy (in which case it defaults to -proxy set above, or none)
@@ -1535,6 +1558,10 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
     }
 
     // see Step 2: parameter interactions for more information about these
+    //-listen：接受从某个地址的连接请求。
+    //-discover：发现拥有的ip地址。
+    //-blocksonly：让节点进入blocksonly模式。  就是节点不接收临时的交易，只接受已确认的区块。
+    //-externalip：指定公有地址。
     fListen = GetBoolArg("-listen", DEFAULT_LISTEN);
     fDiscover = GetBoolArg("-discover", true);
     fNameLookup = GetBoolArg("-dns", DEFAULT_NAME_LOOKUP);
@@ -1567,7 +1594,8 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
         if (!fBound)
             return InitError(_("Failed to listen on any port. Use -listen=0 if you want this."));
     }
-
+    //对于指定的external ip首先查询对应的ip（指定的可以是域名，或者将字符串ip转换成CService），
+    //然后通过AddLocal将指定的ip添加到mapLocalHost中，由这个结构维护所有的本地ip。
     if (mapArgs.count("-externalip")) {
         BOOST_FOREACH(const std::string& strAddr, mapMultiArgs["-externalip"]) {
             CService addrLocal;
@@ -1577,9 +1605,12 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
                 return InitError(strprintf(_("Cannot resolve -externalip address: '%s'"), strAddr));
         }
     }
-
+    //种子节点，可以指定连接的种子节点
     BOOST_FOREACH(const std::string& strDest, mapMultiArgs["-seednode"])
         connman.AddOneShot(strDest);
+
+    //zmq封装了网络通信、消息队列、线程调度等功能，向上层提供简洁的API，应用程序通过加载库文件，调用API函数来实现高性能网络通信。
+    //前面介绍了RegisterValidationInterface函数，此函数注册了许多区块处理的信号。然后下面通过-maxuploadtarget参数来设置最大上传速度。 
 
 #if ENABLE_ZMQ
     pzmqNotificationInterface = CZMQNotificationInterface::CreateWithArguments(mapArgs);
@@ -1588,20 +1619,24 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
         RegisterValidationInterface(pzmqNotificationInterface);
     }
 #endif
-
+    //masternode 对于区块接受的处理
     pdsNotificationInterface = new CDSNotificationInterface(connman);
     RegisterValidationInterface(pdsNotificationInterface);
 
+    //-maxuploadtarget：设置最大上传速度，单位为MB，默认值为0，表示没有限制。
     if (mapArgs.count("-maxuploadtarget")) {
         connman.SetMaxOutboundTarget(GetArg("-maxuploadtarget", DEFAULT_MAX_UPLOAD_TARGET)*1024*1024);
     }
 
     // ********************************************************* Step 7: load block chain
 
+    //-reindex：从磁盘上的blk*.dat中重建chain state和block index。
     fReindex = GetBoolArg("-reindex", false);
+    //-reindex-chainstate：从当前的区块索引中建立chain state。
     bool fReindexChainState = GetBoolArg("-reindex-chainstate", false);
 
     // Upgrading to 0.8; hard-link the old blknnnn.dat files into /blocks/
+    // 以前的 block 不在 对立目录 blocks 中，现在硬连接过来，而是在根目录中
     boost::filesystem::path blocksDir = GetDataDir() / "blocks";
     if (!boost::filesystem::exists(blocksDir))
     {
@@ -1622,16 +1657,18 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
                 break;
             }
         }
-        if (linked)
+        if (linked) //因为重新连接了，所以重新建立 index
         {
             fReindex = true;
         }
     }
 
     // cache size calculations
+    //-dbcache：设置数据库缓存大小，单位为MB，默认值为450.
     int64_t nTotalCache = (GetArg("-dbcache", nDefaultDbCache) << 20);
     nTotalCache = std::max(nTotalCache, nMinDbCache << 20); // total cache cannot be less than nMinDbCache
     nTotalCache = std::min(nTotalCache, nMaxDbCache << 20); // total cache cannot be greated than nMaxDbcache
+    //-txindex：维护完整的交易索引
     int64_t nBlockTreeDBCache = nTotalCache / 8;
     nBlockTreeDBCache = std::min(nBlockTreeDBCache, (GetBoolArg("-txindex", DEFAULT_TXINDEX) ? nMaxBlockDBAndTxIndexCache : nMaxBlockDBCache) << 20);
     nTotalCache -= nBlockTreeDBCache;
@@ -1639,6 +1676,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
     nCoinDBCache = std::min(nCoinDBCache, nMaxCoinsDBCache << 20); // cap total coins db cache
     nTotalCache -= nCoinDBCache;
     nCoinCacheUsage = nTotalCache; // the rest goes to in-memory cache
+    //-maxmempool：设置交易内存池的最大大小，单位为MB，默认值为300。
     nMempoolSizeMax = GetArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000;
     LogPrintf("Cache configuration:\n");
     LogPrintf("* Using %.1fMiB for block index database\n", nBlockTreeDBCache * (1.0 / 1024 / 1024));
@@ -1653,6 +1691,8 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
         uiInterface.InitMessage(_("Loading block index..."));
 
         nStart = GetTimeMillis();
+        //标记变量fLoaded表示索引加载是否成功，如果执行完循环体发现此变量还是false并且没有请求关闭程序的话，那么就再执行一遍。
+        //由于此循环体可能不止执行一遍，所以先调用UnloadBlockIndex()来清除上次循环可能设置的一些变量
         do {
             try {
                 UnloadBlockIndex();
@@ -1661,14 +1701,18 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
                 delete pcoinscatcher;
                 delete pblocktree;
 
+                //CBlockTreeDB类，这个类是用来向/blocks/index/*下面的文件进行读写操作
+                
                 pblocktree = new CBlockTreeDB(nBlockTreeDBCache, false, fReindex);
                 pcoinsdbview = new CCoinsViewDB(nCoinDBCache, false, fReindex || fReindexChainState);
                 pcoinscatcher = new CCoinsViewErrorCatcher(pcoinsdbview);
                 pcoinsTip = new CCoinsViewCache(pcoinscatcher);
 
+                //reindex用来设定是否重新创建所有的索引，如果为true，那么就调用CBlockTreeDB中的WriteReindexing向数据库中写入数据
                 if (fReindex) {
                     pblocktree->WriteReindexing(true);
                     //If we're reindexing in prune mode, wipe away unusable block files and all undo data files
+                    //fPruneMode参数，是用来修剪已确认的区块的，这里如果在启用了重索引，那么就得先删除已验证的区块信息
                     if (fPruneMode)
                         CleanupBlockRevFiles();
                 } else {
@@ -1679,7 +1723,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
                     }
                 }
                 if (fRequestShutdown) break;
-
+                 //读 blockindex
                 if (!LoadBlockIndex()) {
                     strLoadError = _("Error loading block database");
                     break;
@@ -1687,15 +1731,19 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
 
                 // If the loaded chain has a wrong genesis, bail out immediately
                 // (we're likely using a testnet datadir, or the other way around).
+                //如果读盘了，但是创世区块不对，失败 // 检查mapBlockIndex中是否加载了创世块
                 if (!mapBlockIndex.empty() && mapBlockIndex.count(chainparams.GetConsensus().hashGenesisBlock) == 0)
                     return InitError(_("Incorrect or no genesis block found. Wrong datadir for network?"));
 
                 // Initialize the block index (no-op if non-empty database was already loaded)
+                //初始化BlockIndex
+                // chainActive.Genesis() != NULL 根据这个判断 LoadBlockIndex 是否成功，如果不成功，写入初始化参数，并写入创世区块
                 if (!InitBlockIndex(chainparams)) {
                     strLoadError = _("Error initializing block database");
                     break;
                 }
-
+                //检查txindex的状态，因为在上一个函数(LoadBlockIndex)中如果设置了reindex,
+                //那么fTxindex也会被重置 
                 // Check for changed -txindex state
                 if (fTxIndex != GetBoolArg("-txindex", DEFAULT_TXINDEX)) {
                     strLoadError = _("You need to rebuild the database using -reindex-chainstate to change -txindex");
@@ -1704,6 +1752,8 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
 
                 // Check for changed -prune state.  What we are concerned about is a user who has pruned blocks
                 // in the past, but is now trying to run unpruned.
+                // 检查-prune的状态，因为用户可能会手动删除一些文件，然后
+                // 现在又想在未删除的模式中运行
                 if (fHavePruned && !fPruneMode) {
                     strLoadError = _("You need to rebuild the database using -reindex to go back to unpruned mode.  This will redownload the entire blockchain");
                     break;
@@ -1714,7 +1764,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
                     LogPrintf("Prune: pruned datadir may not have more than %d blocks; -checkblocks=%d may fail\n",
                         MIN_BLOCKS_TO_KEEP, GetArg("-checkblocks", DEFAULT_CHECKBLOCKS));
                 }
-
+                 // 区块不可能比当前时间大2小时
                 {
                     LOCK(cs_main);
                     CBlockIndex* tip = chainActive.Tip();
@@ -1725,7 +1775,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
                         break;
                     }
                 }
-
+                //数据库校验
                 if (!CVerifyDB().VerifyDB(chainparams, pcoinsdbview, GetArg("-checklevel", DEFAULT_CHECKLEVEL),
                               GetArg("-checkblocks", DEFAULT_CHECKBLOCKS))) {
                     strLoadError = _("Corrupted block database detected");
@@ -1739,7 +1789,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
 
             fLoaded = true;
         } while(false);
-
+        //如果加载失败，咨询用户是否重建，如果不重建，退出，如果重建，继续下一个循环
         if (!fLoaded && !fRequestShutdown) {
             // first suggest a reindex
             if (!fReset) {
@@ -1763,6 +1813,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
     // As LoadBlockIndex can take several minutes, it's possible the user
     // requested to kill the GUI during the last operation. If so, exit.
     // As the program has not fully started yet, Shutdown() is possibly overkill.
+    // 时间太长了，可能系统要求退出
     if (fRequestShutdown)
     {
         LogPrintf("Shutdown requested. Exiting.\n");
@@ -1786,7 +1837,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
 
         // needed to restore wallet transaction meta data after -zapwallettxes
         std::vector<CWalletTx> vWtx;
-
+        // 切换钱包
         if (GetBoolArg("-zapwallettxes", false)) {
             uiInterface.InitMessage(_("Zapping all transactions from wallet..."));
 
@@ -1803,6 +1854,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
 
         uiInterface.InitMessage(_("Loading wallet..."));
 
+        //加载钱包
         nStart = GetTimeMillis();
         bool fFirstRun = true;
         pwalletMain = new CWallet(strWalletFile);
@@ -1827,7 +1879,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
             else
                 strErrors << _("Error loading wallet.dat") << "\n";
         }
-
+        //升级钱包
         if (GetBoolArg("-upgradewallet", fFirstRun))
         {
             int nMaxVersion = GetArg("-upgradewallet", 0);
@@ -1843,12 +1895,12 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
                 strErrors << _("Cannot downgrade wallet") << "\n";
             pwalletMain->SetMaxVersion(nMaxVersion);
         }
-
+        //第一次运行钱包
         if (fFirstRun)
         {
             // Create new keyUser and set as default key
             RandAddSeedPerfmon();
-
+            // HD钱包
             if (GetBoolArg("-usehd", DEFAULT_USE_HD_WALLET) && !pwalletMain->IsHDEnabled()) {
                 if (GetArg("-mnemonicpassphrase", "").size() > 256)
                     return InitError(_("Mnemonic passphrase is too long, must be at most 256 characters"));
@@ -1858,7 +1910,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
                 // ensure this wallet.dat can only be opened by clients supporting HD
                 pwalletMain->SetMinVersion(FEATURE_HD);
             }
-
+            //设置缺省 key
             CPubKey newDefaultKey;
             if (pwalletMain->GetKeyFromPool(newDefaultKey, false)) {
                 pwalletMain->SetDefaultKey(newDefaultKey);
@@ -1871,6 +1923,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
             // Try to create wallet backup right after new wallet was created
             std::string strBackupWarning;
             std::string strBackupError;
+            //自动备份钱包
             if(!AutoBackupWallet(pwalletMain, "", strBackupWarning, strBackupError)) {
                 if (!strBackupWarning.empty())
                     InitWarning(strBackupWarning);
@@ -1879,6 +1932,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
             }
 
         }
+        //HD 标志和当前钱包的标志不一致
         else if (mapArgs.count("-usehd")) {
             bool useHD = GetBoolArg("-usehd", DEFAULT_USE_HD_WALLET);
             if (pwalletMain->IsHDEnabled() && !useHD)
@@ -1888,15 +1942,17 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
         }
 
         // Warn user every time he starts non-encrypted HD wallet
+        // 如果是 HD  钱包，必须加密使用，否则提示用户
         if (GetBoolArg("-usehd", DEFAULT_USE_HD_WALLET) && !pwalletMain->IsLocked()) {
             InitWarning(_("Make sure to encrypt your wallet and delete all non-encrypted backups after you verified that wallet works!"));
         }
 
         LogPrintf("%s", strErrors.str());
         LogPrintf(" wallet      %15dms\n", GetTimeMillis() - nStart);
-
+        //注册钱包回调
         RegisterValidationInterface(pwalletMain);
 
+        //找到钱包最后接收到的块，更新钱包数据
         CBlockIndex *pindexRescan = chainActive.Tip();
         if (GetBoolArg("-rescan", false))
             pindexRescan = chainActive.Genesis();
@@ -1909,18 +1965,18 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
             else
                 pindexRescan = chainActive.Genesis();
         }
-        if (chainActive.Tip() && chainActive.Tip() != pindexRescan)
+        if (chainActive.Tip() && chainActive.Tip() != pindexRescan) //更新钱包数据，因为扫描块不是当前最末梢块
         {
             //We can't rescan beyond non-pruned blocks, stop and throw an error
             //this might happen if a user uses a old wallet within a pruned node
             // or if he ran -disablewallet for a longer time, then decided to re-enable
-            if (fPruneMode)
+            if (fPruneMode) //剪切模式
             {
-                CBlockIndex *block = chainActive.Tip();
+                CBlockIndex *block = chainActive.Tip();//从末梢块，一直找到需要扫描的块
                 while (block && block->pprev && (block->pprev->nStatus & BLOCK_HAVE_DATA) && block->pprev->nTx > 0 && pindexRescan != block)
                     block = block->pprev;
 
-                if (pindexRescan != block)
+                if (pindexRescan != block)//也就是说，中间断了，需要重新 reindex
                     return InitError(_("Prune: last wallet synchronisation goes beyond pruned data. You need to -reindex (download the whole blockchain again in case of pruned node)"));
             }
 
@@ -1930,9 +1986,10 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
             pwalletMain->ScanForWalletTransactions(pindexRescan, true);
             LogPrintf(" rescan      %15dms\n", GetTimeMillis() - nStart);
             pwalletMain->SetBestChain(chainActive.GetLocator());
-            nWalletDBUpdated++;
+            nWalletDBUpdated++; //刷新钱包 wallet.dat，钱包有个线程 ThreadFlushWalletDB 根据这个变化来刷新
 
             // Restore wallet transaction metadata after -zapwallettxes=1
+            // 如果切换钱包，把旧钱包的交易记录弄过来
             if (GetBoolArg("-zapwallettxes", false) && GetArg("-zapwallettxes", "1") != "2")
             {
                 CWalletDB walletdb(strWalletFile);
@@ -1967,10 +2024,11 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
 
     // if pruning, unset the service bit and perform the initial blockstore prune
     // after any wallet rescanning has taken place.
+    // 如果是修剪块模式，不提供 NODE_NETWORK server  服务
     if (fPruneMode) {
         LogPrintf("Unsetting NODE_NETWORK on prune mode\n");
         nLocalServices = ServiceFlags(nLocalServices & ~NODE_NETWORK);
-        if (!fReindex) {
+        if (!fReindex) { //剪切开始了
             uiInterface.InitMessage(_("Pruning blockstore..."));
             PruneAndFlush();
         }
@@ -1980,13 +2038,14 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
 
     if (mapArgs.count("-blocknotify"))
         uiInterface.NotifyBlockTip.connect(BlockNotifyCallback);
-
+    //导入块数据 
     std::vector<boost::filesystem::path> vImportFiles;
     if (mapArgs.count("-loadblock"))
     {
         BOOST_FOREACH(const std::string& strFile, mapMultiArgs["-loadblock"])
             vImportFiles.push_back(strFile);
     }
+    //启动导入线程，等待导入一个完成
     threadGroup.create_thread(boost::bind(&ThreadImport, vImportFiles));
     if (chainActive.Tip() == NULL) {
         LogPrintf("Waiting for genesis block to be imported...\n");
@@ -1994,10 +2053,12 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
             MilliSleep(10);
     }
 
-    // ********************************************************* Step 11a: setup PrivateSend
+    // ********************************************************* 
+    //  Step 11a: setup PrivateSend 主节点初始化
+    // 是否支持 主节点
     fMasterNode = GetBoolArg("-masternode", false);
     // TODO: masternode should have no wallet
-
+    //如果是主节点，必须打开交易索引，这个应该记录在块数据结构中了
     if((fMasterNode || masternodeConfig.getCount() > -1) && fTxIndex == false) {
         return InitError("Enabling Masternode support requires turning on transaction indexing."
                   "Please add txindex=1 to your configuration and start with -reindex");
@@ -2005,7 +2066,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
 
     if(fMasterNode) {
         LogPrintf("MASTERNODE:\n");
-
+        //启动主节点，必须要求用户提供主节点的  key pubKey
         std::string strMasterNodePrivKey = GetArg("-masternodeprivkey", "");
         if(!strMasterNodePrivKey.empty()) {
             if(!CMessageSigner::GetKeysFromSecret(strMasterNodePrivKey, activeMasternode.keyMasternode, activeMasternode.pubKeyMasternode))
@@ -2020,6 +2081,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
 #ifdef ENABLE_WALLET
     LogPrintf("Using masternode config file %s\n", GetMasternodeConfigFile().string());
 
+    //锁定主节点挖矿所得
     if(GetBoolArg("-mnconflock", true) && pwalletMain && (masternodeConfig.getCount() > 0)) {
         LOCK(pwalletMain->cs_wallet);
         LogPrintf("Locking Masternodes:\n");
@@ -2151,10 +2213,10 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
         LogPrintf("wallet is NULL\n");
     }
 #endif
-
+    //listenonion（匿名地址监听），此处设计一个通信机制的一个概念：第二代洋葱路由（onion routing） 
     if (GetBoolArg("-listenonion", DEFAULT_LISTEN_ONION))
         StartTorControl(threadGroup, scheduler);
-
+    //添加本机地址
     Discover(threadGroup);
 
     // Map ports with UPnP
@@ -2171,11 +2233,12 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
     connOptions.uiInterface = &uiInterface;
     connOptions.nSendBufferMaxSize = 1000*GetArg("-maxsendbuffer", DEFAULT_MAXSENDBUFFER);
     connOptions.nReceiveFloodSize = 1000*GetArg("-maxreceivebuffer", DEFAULT_MAXRECEIVEBUFFER);
-
+    //启动网络
     if (!connman.Start(scheduler, strNodeError, connOptions))
         return InitError(strNodeError);
 
     // Generate coins in the background
+    //挖矿
     GenerateBitcoins(GetBoolArg("-gen", DEFAULT_GENERATE), GetArg("-genproclimit", DEFAULT_GENERATE_THREADS), chainparams, connman);
 
     // ********************************************************* Step 13: finished
@@ -2184,6 +2247,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
     uiInterface.InitMessage(_("Done loading"));
 
 #ifdef ENABLE_WALLET
+    //启动钱包刷新数据线程
     if (pwalletMain) {
         // Add wallet transactions that aren't already in a block to mapTransactions
         pwalletMain->ReacceptWalletTransactions();
@@ -2192,7 +2256,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
         threadGroup.create_thread(boost::bind(&ThreadFlushWalletDB, boost::ref(pwalletMain->strWalletFile)));
     }
 #endif
-
+   //启动警告消息线程
     threadGroup.create_thread(boost::bind(&ThreadSendAlert, boost::ref(connman)));
 
     return !fRequestShutdown;

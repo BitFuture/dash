@@ -475,10 +475,14 @@ boost::thread threadHTTP;
 bool StartHTTPServer()
 {
     LogPrint("http", "Starting HTTP server\n");
+    //-rpcthreads获取rpc执行的最大线程数
     int rpcThreads = std::max((long)GetArg("-rpcthreads", DEFAULT_HTTP_THREADS), 1L);
     LogPrintf("HTTP: starting %d worker threads\n", rpcThreads);
     threadHTTP = boost::thread(boost::bind(&ThreadHTTP, eventBase, eventHTTP));
 
+    //设置的rpc线程数创建对应的rpc_worker来执行workQueue，创建完线程之后便让线程从当前线程脱离出去，通过detach()操作，交给了系统去管理
+    // workQueue 函数通过全局变量running来控制程序的退出，该变量在Intertupt()中进行修改。实现的功能就是不断的从队列中读取任务，
+    // 每一个任务是一个WorkItem类型，而这个WorkItem是一个模板类型，实际传入的存放的内容是函数地址，所以从队列中取出后就可以直接当成函数运行
     for (int i = 0; i < rpcThreads; i++)
         boost::thread(boost::bind(&HTTPWorkQueueRun, workQueue));
     return true;

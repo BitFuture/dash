@@ -186,7 +186,7 @@ CBlockIndex* FindForkInGlobalIndex(const CChain& chain, const CBlockLocator& loc
 
 CCoinsViewDB *pcoinsdbview = NULL;
 CCoinsViewCache *pcoinsTip = NULL;
-CBlockTreeDB *pblocktree = NULL;
+CBlockTreeDB *pblocktree = NULL;    //这个类是用来向/blocks/index/*下面的文件进行读写操作
 
 enum FlushStateMode {
     FLUSH_STATE_NONE,
@@ -3956,7 +3956,9 @@ void UnloadBlockIndex()
     mapBlockIndex.clear();
     fHavePruned = false;
 }
-
+//LoadBlockIndex首先将从数据库中加载fTxIndex变量，如果是在进行重索引那么就从命令行读取fTxIndex的值。
+//另外如果我们之前删除过区块文件，那么这里还会架子啊fHavePruned变量，同时还会根据磁盘上的标记来设置fReindex变量，
+//并且从此往后fReindex和fReset就表示不同的含义
 bool LoadBlockIndex()
 {
     // Load block index from databases

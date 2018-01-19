@@ -590,7 +590,7 @@ void CWallet::Flush(bool shutdown)
 {
     bitdb.Flush(shutdown);
 }
-
+//验证钱包数据库的完整性，从而避免钱包内容被本地错误的修改。钱包的启用是通过一个宏定义来进行实现的，如果启用了这个宏那么就会进行钱包数据的完整性校验
 bool CWallet::Verify(const string& walletFile, string& warningString, string& errorString)
 {
     if (!bitdb.Open(GetDataDir()))
@@ -613,14 +613,17 @@ bool CWallet::Verify(const string& walletFile, string& warningString, string& er
             return true;
         }
     }
-    
+    // -salvgewallet：从损坏的钱包文件中尝试回复私钥。
     if (GetBoolArg("-salvagewallet", false))
     {
+        //先备份原来的钱包文件，然后调用CDBEnv类中的Salvage函数，这个函数实现的功能是从文件中将公私钥读取出来并保存在到salvagedData中。
+        //恢复完之后就将恢复的数据写入到本地数据库中，这个写入的过程都是通过pdbCopy对象来进行的，同时如果定义了recoverKVcallback函数，
+        //那么还同时写入到callbackDataIn对象中，用于传给上层调用函数
         // Recover readable keypairs:
         if (!CWalletDB::Recover(bitdb, walletFile, true))
             return false;
     }
-    
+    //验证数据库文件
     if (boost::filesystem::exists(GetDataDir() / walletFile))
     {
         CDBEnv::VerifyResult r = bitdb.Verify(walletFile, CWalletDB::Recover);
