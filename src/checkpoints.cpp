@@ -26,7 +26,7 @@ namespace Checkpoints {
      */
     static const double SIGCHECK_VERIFICATION_FACTOR = 5.0;
 
-    //! Guess how far we are in the verification process at the given block index
+    //! Guess how far we are in the verification process at the given block index 计算交易的大致进度，
     double GuessVerificationProgress(const CCheckpointData& data, CBlockIndex *pindex, bool fSigchecks) {
         if (pindex==NULL)
             return 0.0;
@@ -40,8 +40,8 @@ namespace Checkpoints {
         // fSigcheckVerificationFactor per transaction after.
 
         if (pindex->nChainTx <= data.nTransactionsLastCheckpoint) {
-            double nCheapBefore = pindex->nChainTx;
-            double nCheapAfter = data.nTransactionsLastCheckpoint - pindex->nChainTx;
+            double nCheapBefore = pindex->nChainTx; //前面的交易
+            double nCheapAfter = data.nTransactionsLastCheckpoint - pindex->nChainTx;//未达到的交易
             double nExpensiveAfter = (nNow - data.nTimeLastCheckpoint)/86400.0*data.fTransactionsPerDay;
             fWorkBefore = nCheapBefore;
             fWorkAfter = nCheapAfter + nExpensiveAfter*fSigcheckVerificationFactor;
@@ -53,7 +53,7 @@ namespace Checkpoints {
             fWorkAfter = nExpensiveAfter*fSigcheckVerificationFactor;
         }
 
-        return fWorkBefore / (fWorkBefore + fWorkAfter);
+        return fWorkBefore / (fWorkBefore + fWorkAfter);//交易的百分比，只是个估计值
     }
 
     CBlockIndex* GetLastCheckpoint(const CCheckpointData& data)

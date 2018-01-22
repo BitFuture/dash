@@ -163,9 +163,9 @@ public:
 
 struct CRecipient
 {
-    CScript scriptPubKey;
-    CAmount nAmount;
-    bool fSubtractFeeFromAmount;
+    CScript scriptPubKey;//接受地址
+    CAmount nAmount;//接受钱
+    bool fSubtractFeeFromAmount;//发送设置，在发送界面设置，费用是否为自动均分，还是直接费用
 };
 
 typedef std::map<std::string, std::string> mapValue_t;

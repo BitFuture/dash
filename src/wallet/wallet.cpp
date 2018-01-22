@@ -99,7 +99,7 @@ const CWalletTx* CWallet::GetWalletTx(const uint256& hash) const
         return NULL;
     return &(it->second);
 }
-
+//创建 key
 CPubKey CWallet::GenerateNewKey(uint32_t nAccountIndex, bool fInternal)
 {
     AssertLockHeld(cs_wallet); // mapKeyMetadata
@@ -959,7 +959,7 @@ bool CWallet::AddToWallet(const CWalletTx& wtxIn, bool fFromLoadWallet, CWalletD
                              wtxIn.hashBlock.ToString());
             }
             AddToSpends(hash);
-            for(int i = 0; i < wtx.vout.size(); ++i) {
+            for(unsigned int i = 0; i < wtx.vout.size(); ++i) {
                 if (IsMine(wtx.vout[i]) && !IsSpent(hash, i)) {
                     setWalletUTXO.insert(COutPoint(hash, i));
                 }
@@ -2358,6 +2358,7 @@ void CWallet::AvailableCoins(vector<COutput>& vCoins, bool fOnlyConfirmed, const
 
     {
         LOCK2(cs_main, cs_wallet);
+        //递归自己的所有　in
         for (map<uint256, CWalletTx>::const_iterator it = mapWallet.begin(); it != mapWallet.end(); ++it)
         {
             const uint256& wtxid = it->first;
@@ -3156,11 +3157,11 @@ bool CWallet::CreateTransaction(const vector<CRecipient>& vecSend, CWalletTx& wt
 {
     CAmount nFeePay = fUseInstantSend ? CTxLockRequest().GetMinFee() : 0;
 
-    CAmount nValue = 0;
-    unsigned int nSubtractFeeFromAmount = 0;
+    CAmount nValue = 0; //总值
+    unsigned int nSubtractFeeFromAmount = 0;//自动扣费的总计数
     BOOST_FOREACH (const CRecipient& recipient, vecSend)
     {
-        if (nValue < 0 || recipient.nAmount < 0)
+        if (nValue < 0 || recipient.nAmount < 0)//这个有问题，nValue　初始为　０　一进来就退出了
         {
             strFailReason = _("Transaction amounts must be positive");
             return false;
@@ -3170,7 +3171,7 @@ bool CWallet::CreateTransaction(const vector<CRecipient>& vecSend, CWalletTx& wt
         if (recipient.fSubtractFeeFromAmount)
             nSubtractFeeFromAmount++;
     }
-    if (vecSend.empty() || nValue < 0)
+    if (vecSend.empty() || nValue < 0)//必须有输出
     {
         strFailReason = _("Transaction amounts must be positive");
         return false;
@@ -3200,7 +3201,7 @@ bool CWallet::CreateTransaction(const vector<CRecipient>& vecSend, CWalletTx& wt
     // enough, that fee sniping isn't a problem yet, but by implementing a fix
     // now we ensure code won't be written that makes assumptions about
     // nLockTime that preclude a fix later.
-
+    // 计算锁定时间，
     txNew.nLockTime = chainActive.Height();
 
     // Secondly occasionally randomly pick a nLockTime even further back, so
@@ -3217,7 +3218,7 @@ bool CWallet::CreateTransaction(const vector<CRecipient>& vecSend, CWalletTx& wt
         LOCK2(cs_main, cs_wallet);
         {
             nFeeRet = 0;
-            if(nFeePay > 0) nFeeRet = nFeePay;
+            if(nFeePay > 0) nFeeRet = nFeePay;//最小费用　　InstantSend　才有
             // Start with no fee and loop until there is enough fee
             while (true)
             {
@@ -3227,11 +3228,11 @@ bool CWallet::CreateTransaction(const vector<CRecipient>& vecSend, CWalletTx& wt
                 nChangePosRet = -1;
                 bool fFirst = true;
 
-                CAmount nValueToSelect = nValue;
-                if (nSubtractFeeFromAmount == 0)
-                    nValueToSelect += nFeeRet;
+                CAmount nValueToSelect = nValue;//需要搜索的总输入
+                if (nSubtractFeeFromAmount == 0)//如果不是自动扣费，选择的时候，需要把费加到in中去搜寻有效in
+                    nValueToSelect += nFeeRet;//加上费用
                 double dPriority = 0;
-                // vouts to the payees
+                // vouts to the payees //自动计算费用，这个在　QT　的界面有个　checkbox在决定是指定费用，还是自动计算费用。
                 BOOST_FOREACH (const CRecipient& recipient, vecSend)
                 {
                     CTxOut txout(recipient.nAmount, recipient.scriptPubKey);
@@ -3239,14 +3240,14 @@ bool CWallet::CreateTransaction(const vector<CRecipient>& vecSend, CWalletTx& wt
                     if (recipient.fSubtractFeeFromAmount)
                     {
                         txout.nValue -= nFeeRet / nSubtractFeeFromAmount; // Subtract fee equally from each selected recipient
-
+                        //总费用被平分，余数加在第一个输出上。
                         if (fFirst) // first receiver pays the remainder not divisible by output count
                         {
                             fFirst = false;
                             txout.nValue -= nFeeRet % nSubtractFeeFromAmount;
                         }
                     }
-
+                    //输出不能小于最小值
                     if (txout.IsDust(::minRelayTxFee))
                     {
                         if (recipient.fSubtractFeeFromAmount && nFeeRet > 0)
@@ -3267,6 +3268,8 @@ bool CWallet::CreateTransaction(const vector<CRecipient>& vecSend, CWalletTx& wt
                 set<pair<const CWalletTx*,unsigned int> > setCoins;
                 CAmount nValueIn = 0;
 
+                //SelectCoins(nValue, setCoins)得到一系列币，并放入setCoins。
+                //setCoins包含支付给你本人地址的交易，即你所拥有的币。这些交易将成为wtxNew的来源交易。
                 if (!SelectCoins(nValueToSelect, setCoins, nValueIn, coinControl, nCoinType, fUseInstantSend))
                 {
                     if (nCoinType == ONLY_NONDENOMINATED) {
@@ -3306,7 +3309,7 @@ bool CWallet::CreateTransaction(const vector<CRecipient>& vecSend, CWalletTx& wt
                 const CAmount nChange = nValueIn - nValueToSelect;
                 CTxOut newTxOut;
 
-                if (nChange > 0)
+                if (nChange > 0)//找到的in比实际输出的多，常见一个找零
                 {
 
                     //over pay for denominated transactions
@@ -3323,6 +3326,7 @@ bool CWallet::CreateTransaction(const vector<CRecipient>& vecSend, CWalletTx& wt
                         CScript scriptChange;
 
                         // coin control: send change to custom address
+                        // 指定目标地址，一般为　　
                         if (coinControl && !boost::get<CNoDestination>(&coinControl->destChange))
                             scriptChange = GetScriptForDestination(coinControl->destChange);
 
@@ -3337,7 +3341,7 @@ bool CWallet::CreateTransaction(const vector<CRecipient>& vecSend, CWalletTx& wt
                             //  post-backup change.
 
                             // Reserve a new key pair from key pool
-                            CPubKey vchPubKey;
+                            CPubKey vchPubKey;  //给自己的找零
                             if (!reservekey.GetReservedKey(vchPubKey, true))
                             {
                                 strFailReason = _("Keypool ran out, please call keypoolrefill first");
@@ -3351,6 +3355,7 @@ bool CWallet::CreateTransaction(const vector<CRecipient>& vecSend, CWalletTx& wt
                         // We do not move dust-change to fees, because the sender would end up paying more than requested.
                         // This would be against the purpose of the all-inclusive feature.
                         // So instead we raise the change and deduct from the recipient.
+                        // 如果是自动扣费，新产生的这个费用过低，需要从上面的费用中重新计算费用
                         if (nSubtractFeeFromAmount > 0 && newTxOut.IsDust(::minRelayTxFee))
                         {
                             CAmount nDust = newTxOut.GetDustThreshold(::minRelayTxFee) - newTxOut.nValue;
@@ -3371,7 +3376,7 @@ bool CWallet::CreateTransaction(const vector<CRecipient>& vecSend, CWalletTx& wt
                         }
 
                         // Never create dust outputs; if we would, just
-                        // add the dust to the fee.
+                        // add the dust to the fee.　不够，要重新搜索
                         if (newTxOut.IsDust(::minRelayTxFee))
                         {
                             nFeeRet += nChange;
@@ -3379,7 +3384,7 @@ bool CWallet::CreateTransaction(const vector<CRecipient>& vecSend, CWalletTx& wt
                         }
                         else
                         {
-                            // Insert change txn at random position:
+                            // Insert change txn at random position:　随机插入一个位置
                             nChangePosRet = GetRandInt(txNew.vout.size()+1);
                             vector<CTxOut>::iterator position = txNew.vout.begin()+nChangePosRet;
                             txNew.vout.insert(position, newTxOut);
@@ -3406,7 +3411,7 @@ bool CWallet::CreateTransaction(const vector<CRecipient>& vecSend, CWalletTx& wt
                 sort(txNew.vout.begin(), txNew.vout.end(), CompareOutputBIP69());
 
                 // If there was change output added before, we must update its position now
-                if (nChangePosRet != -1) {
+                if (nChangePosRet != -1) {//找到找零的位置
                     int i = 0;
                     BOOST_FOREACH(const CTxOut& txOut, txNew.vout)
                     {
@@ -3419,7 +3424,7 @@ bool CWallet::CreateTransaction(const vector<CRecipient>& vecSend, CWalletTx& wt
                     }
                 }
 
-                // Sign
+                // Sign　签名入
                 int nIn = 0;
                 CTransaction txNewConst(txNew);
                 for (const auto& txdsin : vecTxDSInTmp)
@@ -3461,7 +3466,7 @@ bool CWallet::CreateTransaction(const vector<CRecipient>& vecSend, CWalletTx& wt
                 dPriority = wtxNew.ComputePriority(dPriority, nBytes);
 
                 // Can we complete this as a free transaction?
-                // Note: InstantSend transaction can't be a free one
+                // Note: InstantSend transaction can't be a free one　　免费交易，并且确认优先级矿工会承认。
                 if (!fUseInstantSend && fSendFreeTransactions && nBytes <= MAX_FREE_TRANSACTION_CREATE_SIZE)
                 {
                     // Not enough fee: enough priority?

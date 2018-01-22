@@ -29,7 +29,7 @@
  * secure_allocator is defined in allocators.h
  * CPrivKey is a serialized private key, with all parameters included (279 bytes)
  */
-typedef std::vector<unsigned char, secure_allocator<unsigned char> > CPrivKey;
+typedef std::vector<unsigned char, secure_allocator<unsigned char> > CPrivKey;//私钥
 
 /** An encapsulated private key. */
 class CKey
@@ -37,16 +37,16 @@ class CKey
 private:
     //! Whether this private key is valid. We check for correctness when modifying the key
     //! data, so fValid should always correspond to the actual state.
-    bool fValid;
+    bool fValid;  //是否有效
 
     //! Whether the public key corresponding to this private key is (to be) compressed.
-    bool fCompressed;
+    bool fCompressed;    //是否压缩
 
     //! The actual byte data
     unsigned char vch[32];
 
     //! Check whether the 32-byte array pointed to be vch is valid keydata.
-    bool static Check(const unsigned char* vch);
+    bool static Check(const unsigned char* vch);//检查是否有效
 
 public:
     //! Construct an invalid private key.
