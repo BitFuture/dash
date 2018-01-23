@@ -884,7 +884,7 @@ bool CWallet::AddToWallet(const CWalletTx& wtxIn, bool fFromLoadWallet, CWalletD
 {
     uint256 hash = wtxIn.GetHash();
 
-    if (fFromLoadWallet)
+    if (fFromLoadWallet)//从读钱包数据来
     {
         mapWallet[hash] = wtxIn;
         CWalletTx& wtx = mapWallet[hash];
@@ -900,7 +900,7 @@ bool CWallet::AddToWallet(const CWalletTx& wtxIn, bool fFromLoadWallet, CWalletD
             }
         }
     }
-    else
+    else//从外部来
     {
         LOCK(cs_wallet);
         // Inserts only if not already there, returns tx inserted or tx found
@@ -1035,8 +1035,11 @@ bool CWallet::AddToWalletIfInvolvingMe(const CTransaction& tx, const CBlock* pbl
 
         if (pblock) {
             BOOST_FOREACH(const CTxIn& txin, tx.vin) {
+                //equal_range函数用于在序列中表示一个数值的第一次出现与最后一次出现的后一位。得到相等元素的子范围
                 std::pair<TxSpends::const_iterator, TxSpends::const_iterator> range = mapTxSpends.equal_range(txin.prevout);
+                //一个　prevout　出现了两次以上消费
                 while (range.first != range.second) {
+                    //以块中读取的数据为主，只要消费的hash不是块中记录的交易hase，均认为是　Conflict
                     if (range.first->second != tx.GetHash()) {
                         LogPrintf("Transaction %s (in block %s) conflicts with wallet transaction %s (both spend %s:%i)\n", tx.GetHash().ToString(), pblock->GetHash().ToString(), range.first->second.ToString(), range.first->first.hash.ToString(), range.first->first.n);
                         MarkConflicted(pblock->GetHash(), range.first->second);
@@ -1047,19 +1050,19 @@ bool CWallet::AddToWalletIfInvolvingMe(const CTransaction& tx, const CBlock* pbl
         }
 
         bool fExisted = mapWallet.count(tx.GetHash()) != 0;
-        if (fExisted && !fUpdate) return false;
-        if (fExisted || IsMine(tx) || IsFromMe(tx))
+        if (fExisted && !fUpdate) return false;//如果存在且不更新，直接退出
+        if (fExisted || IsMine(tx) || IsFromMe(tx))//存在或者是自己或者自己发出的
         {
             CWalletTx wtx(this,tx);
 
             // Get merkle branch if transaction was found in a block
-            if (pblock)
+            if (pblock)//添加块hash和交易在块中的索引位置
                 wtx.SetMerkleBranch(*pblock);
 
             // Do not flush the wallet here for performance reasons
             // this is safe, as in case of a crash, we rescan the necessary blocks on startup through our SetBestChain-mechanism
             CWalletDB walletdb(strWalletFile, "r+", false);
-
+            //添加到钱包，并通知界面
             return AddToWallet(wtx, false, &walletdb);
         }
     }
@@ -1679,6 +1682,7 @@ bool CWalletTx::WriteToDisk(CWalletDB *pwalletdb)
  * from or to us. If fUpdate is true, found transactions that already
  * exist in the wallet will be updated.
  */
+// 从　pindexStart　开始扫描区块，更新钱包信息
 int CWallet::ScanForWalletTransactions(CBlockIndex* pindexStart, bool fUpdate)
 {
     int ret = 0;
@@ -1691,6 +1695,7 @@ int CWallet::ScanForWalletTransactions(CBlockIndex* pindexStart, bool fUpdate)
 
         // no need to read and scan block, if block was created before
         // our wallet birthday (as adjusted for block time variability)
+        // 对于小于钱包首次创建私钥的区块，不需要扫描
         while (pindex && nTimeFirstKey && (pindex->GetBlockTime() < (nTimeFirstKey - 7200)))
             pindex = chainActive.Next(pindex);
 
@@ -1703,9 +1708,11 @@ int CWallet::ScanForWalletTransactions(CBlockIndex* pindexStart, bool fUpdate)
                 ShowProgress(_("Rescanning..."), std::max(1, std::min(99, (int)((Checkpoints::GuessVerificationProgress(chainParams.Checkpoints(), pindex, false) - dProgressStart) / (dProgressTip - dProgressStart) * 100))));
 
             CBlock block;
+            //读盘
             ReadBlockFromDisk(block, pindex, Params().GetConsensus());
             BOOST_FOREACH(CTransaction& tx, block.vtx)
             {
+                //把跟当前钱包相关的记录，添加到钱包中
                 if (AddToWalletIfInvolvingMe(tx, &block, fUpdate))
                     ret++;
             }

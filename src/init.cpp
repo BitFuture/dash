@@ -1837,7 +1837,9 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
 
         // needed to restore wallet transaction meta data after -zapwallettxes
         std::vector<CWalletTx> vWtx;
-        // 切换钱包
+        // 清除钱包交易数据。我们已经知道一个交易的确认是要收交易手续费的。
+        // 如果没有手续费或手续费过低。可能会造成这条交易数据在网络中游荡，不会被记录下来。
+        // 所以我们可以通过清除自己的结点交易，并重新下载整个区块链来查找这条交易数据。所以这是一个供用户自己处理可选项
         if (GetBoolArg("-zapwallettxes", false)) {
             uiInterface.InitMessage(_("Zapping all transactions from wallet..."));
 

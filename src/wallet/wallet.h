@@ -204,14 +204,14 @@ private:
     static const uint256 ABANDON_HASH;
 
 public:
-    uint256 hashBlock;
+    uint256 hashBlock;//所在块的hash
 
     /* An nIndex == -1 means that hashBlock (in nonzero) refers to the earliest
      * block in the chain we know this or any in-wallet dependency conflicts
      * with. Older clients interpret nIndex == -1 as unconfirmed for backward
      * compatibility.
      */
-    int nIndex;
+    int nIndex;//所在块中的交易的索引
 
     CMerkleTx()
     {
@@ -742,7 +742,7 @@ public:
 
     std::set<COutPoint> setLockedCoins;
 
-    int64_t nTimeFirstKey;
+    int64_t nTimeFirstKey;//首次产生key的时间，也就是钱包有效时间，搜索区块和交易记录的时候用到，避免搜索钱包之前的交易
     int64_t nKeysLeftSinceAutoBackup;
 
     std::map<CKeyID, CHDPubKey> mapHdPubKeys; //<! memory map of HD extended pubkeys
