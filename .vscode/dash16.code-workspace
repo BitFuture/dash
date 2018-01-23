@@ -1,0 +1,50 @@
+{
+	"folders": [
+		{
+			"path": "/home/adminuser/usb/suncoin/dash"
+		}
+	],
+	"settings": {
+		"files.associations": {
+			"array": "cpp",
+			"chrono": "cpp",
+			"functional": "cpp",
+			"ratio": "cpp",
+			"tuple": "cpp",
+			"type_traits": "cpp",
+			"utility": "cpp",
+			"cctype": "cpp",
+			"clocale": "cpp",
+			"cmath": "cpp",
+			"csignal": "cpp",
+			"cstdarg": "cpp",
+			"cstddef": "cpp",
+			"cstdio": "cpp",
+			"cstdlib": "cpp",
+			"cstring": "cpp",
+			"ctime": "cpp",
+			"cwchar": "cpp",
+			"cwctype": "cpp",
+			"atomic": "cpp",
+			"hash_map": "cpp",
+			"hash_set": "cpp",
+			"*.tcc": "cpp",
+			"condition_variable": "cpp",
+			"cstdint": "cpp",
+			"exception": "cpp",
+			"initializer_list": "cpp",
+			"iosfwd": "cpp",
+			"limits": "cpp",
+			"mutex": "cpp",
+			"new": "cpp",
+			"stdexcept": "cpp",
+			"system_error": "cpp",
+			"thread": "cpp",
+			"typeinfo": "cpp",
+			"codecvt": "cpp",
+			"memory": "cpp",
+			"*.ipp": "cpp",
+			"map": "cpp"
+		}
+	}
+}
