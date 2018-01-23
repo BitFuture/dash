@@ -841,16 +841,16 @@ void InitParameterInteraction()
 {
     // when specifying an explicit binding address, you want to listen on it
     // even when -connect or -proxy is specified
-    if (mapArgs.count("-bind")) {
+    if (mapArgs.count("-bind")) {//如果 Bind 必须监听
         if (SoftSetBoolArg("-listen", true))
             LogPrintf("%s: parameter interaction: -bind set -> setting -listen=1\n", __func__);
     }
-    if (mapArgs.count("-whitebind")) {
+    if (mapArgs.count("-whitebind")) {//如果百名单绑定，必须监听
         if (SoftSetBoolArg("-listen", true))
             LogPrintf("%s: parameter interaction: -whitebind set -> setting -listen=1\n", __func__);
     }
 
-    if (GetBoolArg("-masternode", false)) {
+    if (GetBoolArg("-masternode", false)) {//不是主节点，必须监听
         // masternodes must accept connections from outside
         if (SoftSetBoolArg("-listen", true))
             LogPrintf("%s: parameter interaction: -masternode=1 -> setting -listen=1\n", __func__);
@@ -858,9 +858,9 @@ void InitParameterInteraction()
 
     if (mapArgs.count("-connect") && mapMultiArgs["-connect"].size() > 0) {
         // when only connecting to trusted nodes, do not seed via DNS, or listen by default
-        if (SoftSetBoolArg("-dnsseed", false))
+        if (SoftSetBoolArg("-dnsseed", false))//指定信任连接，就不用种子连接了
             LogPrintf("%s: parameter interaction: -connect set -> setting -dnsseed=0\n", __func__);
-        if (SoftSetBoolArg("-listen", false))
+        if (SoftSetBoolArg("-listen", false))//也不需要监听其他连接了
             LogPrintf("%s: parameter interaction: -connect set -> setting -listen=0\n", __func__);
     }
 
@@ -1474,7 +1474,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
     // SendMessages);
     // InitializeNode);
     // FinalizeNode);
-    RegisterNodeSignals(GetNodeSignals());
+    RegisterNodeSignals(GetNodeSignals());//主要的消息处理函数
 
     // sanitize comments per BIP-0014, format user agent and check total size
     //-uacomment：给用户代理字符串添加注释。
@@ -1491,7 +1491,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
             strSubVersion.size(), MAX_SUBVERSION_LENGTH));
     }
 
-     //-onlynet：只连接特定网络中的节点，取值有NET_UNROUTABLE,NET_IPV4,NET_IPV6,NET_TOR,NET_INTERNAL几种。
+     //-onlynet：只连接特定网络类型的节点，取值有NET_UNROUTABLE,NET_IPV4,NET_IPV6,NET_TOR,NET_INTERNAL几种。
     if (mapArgs.count("-onlynet")) {
         std::set<enum Network> nets;
         BOOST_FOREACH(const std::string& snet, mapMultiArgs["-onlynet"]) {
@@ -1596,7 +1596,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
     }
     //对于指定的external ip首先查询对应的ip（指定的可以是域名，或者将字符串ip转换成CService），
     //然后通过AddLocal将指定的ip添加到mapLocalHost中，由这个结构维护所有的本地ip。
-    if (mapArgs.count("-externalip")) {
+    if (mapArgs.count("-externalip")) {//不要自己访问自己
         BOOST_FOREACH(const std::string& strAddr, mapMultiArgs["-externalip"]) {
             CService addrLocal;
             if (Lookup(strAddr.c_str(), addrLocal, GetListenPort(), fNameLookup) && addrLocal.IsValid())
@@ -2038,7 +2038,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
 
     // ********************************************************* Step 10: import blocks
 
-    if (mapArgs.count("-blocknotify"))
+    if (mapArgs.count("-blocknotify"))//当块链发生切换的时候，执行某个固定的命令
         uiInterface.NotifyBlockTip.connect(BlockNotifyCallback);
     //导入块数据 
     std::vector<boost::filesystem::path> vImportFiles;

@@ -134,13 +134,13 @@ struct CNodeState {
     //! Whether we have a fully established connection.
     bool fCurrentlyConnected;
     //! Accumulated misbehaviour score for this peer.
-    int nMisbehavior;
+    int nMisbehavior;//阻止计数，当到达某个阈值，fShouldBan = TRUE
     //! Whether this peer should be disconnected and banned (unless whitelisted).
-    bool fShouldBan;
+    bool fShouldBan;//某个连接将被阻止
     //! String name of this peer (debugging/logging purposes).
     const std::string name;
     //! List of asynchronously-determined block rejections to notify this peer about.
-    std::vector<CBlockReject> rejects;
+    std::vector<CBlockReject> rejects;//被拒绝的块，PeerLogicValidation::BlockChecked 收到块并检查后，会通知到所有连接，如果是拒绝的块会写入　rejects
     //! The best known block we know this peer has announced.
     CBlockIndex *pindexBestKnownBlock;
     //! The hash of the last unknown block this peer has announced.
@@ -583,7 +583,7 @@ unsigned int LimitOrphanTxSize(unsigned int nMaxOrphans) EXCLUSIVE_LOCKS_REQUIRE
     return nEvicted;
 }
 
-// Requires cs_main.
+// Requires cs_main. 阻止某个地址  howmuch 次数，当超过一定次数，直接阻止
 void Misbehaving(NodeId pnode, int howmuch)
 {
     if (howmuch == 0)
@@ -649,7 +649,7 @@ void PeerLogicValidation::UpdatedBlockTip(const CBlockIndex *pindexNew, const CB
 
     nTimeBestReceived = GetTime();
 }
-
+//当接受到一个块的时候，会通知所有连接这个块的状态，
 void PeerLogicValidation::BlockChecked(const CBlock& block, const CValidationState& state) {
     LOCK(cs_main);
 
@@ -657,7 +657,7 @@ void PeerLogicValidation::BlockChecked(const CBlock& block, const CValidationSta
     std::map<uint256, NodeId>::iterator it = mapBlockSource.find(hash);
 
     int nDoS = 0;
-    if (state.IsInvalid(nDoS)) {
+    if (state.IsInvalid(nDoS)) {//认为这个块不合法，或者是　Dos攻击，会发送给所有连接
         if (it != mapBlockSource.end() && State(it->second)) {
             assert (state.GetRejectCode() < REJECT_INTERNAL); // Blocks are never rejected with internal reject codes
             CBlockReject reject = {(unsigned char)state.GetRejectCode(), state.GetRejectReason().substr(0, MAX_REJECT_MESSAGE_LENGTH), hash};
@@ -1969,6 +1969,8 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         {
             uint64_t nonce = 0;
             vRecv >> nonce;
+            //收到的值从新发回去校验，PONG中校验这个 
+            // 同时，发送方在没有接到本机反馈的时候，避免重复发送 PING 
             // Echo the message back with the nonce. This allows for two useful features:
             //
             // 1) A remote node can quickly check if the connection is operational
@@ -1985,24 +1987,24 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
     }
 
 
-    else if (strCommand == NetMsgType::PONG)
-    {
+    else if (strCommand == NetMsgType::PONG)//定期发送　PING 对方回馈的　PONG
+    {//在网络监视线程中，在监视这个　ping的状态，如果没有正确的返回，则认定网络已经中断
         int64_t pingUsecEnd = nTimeReceived;
         uint64_t nonce = 0;
         size_t nAvail = vRecv.in_avail();
         bool bPingFinished = false;
         std::string sProblem;
 
-        if (nAvail >= sizeof(nonce)) {
+        if (nAvail >= sizeof(nonce)) {//有效数据
             vRecv >> nonce;
 
             // Only process pong message if there is an outstanding ping (old ping without nonce should never pong)
-            if (pfrom->nPingNonceSent != 0) {
-                if (nonce == pfrom->nPingNonceSent) {
+            if (pfrom->nPingNonceSent != 0) {//旧版本没这个
+                if (nonce == pfrom->nPingNonceSent) {//返回值就是自己发送的值
                     // Matching pong received, this ping is no longer outstanding
                     bPingFinished = true;
                     int64_t pingUsecTime = pingUsecEnd - pfrom->nPingUsecStart;
-                    if (pingUsecTime > 0) {
+                    if (pingUsecTime > 0) {//重新计算下次ping的时间，
                         // Successful ping time measurement, replace previous
                         pfrom->nPingUsecTime = pingUsecTime;
                         pfrom->nMinPingUsecTime = std::min(pfrom->nMinPingUsecTime, pingUsecTime);
@@ -2013,7 +2015,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                 } else {
                     // Nonce mismatches are normal when pings are overlapping
                     sProblem = "Nonce mismatch";
-                    if (nonce == 0) {
+                    if (nonce == 0) {//旧版本
                         // This is most likely a bug in another implementation somewhere; cancel this ping
                         bPingFinished = true;
                         sProblem = "Nonce zero";
@@ -2128,9 +2130,9 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
     }
 
 
-    else if (strCommand == NetMsgType::REJECT)
+    else if (strCommand == NetMsgType::REJECT)//对方发来某个块在检查的时候出了问题
     {
-        if (fDebug) {
+        if (fDebug) {//只打印日志　？？？？？？？
             try {
                 string strMsg; unsigned char ccode; string strReason;
                 vRecv >> LIMITED_STRING(strMsg, CMessageHeader::COMMAND_SIZE) >> ccode >> LIMITED_STRING(strReason, MAX_REJECT_MESSAGE_LENGTH);
@@ -2311,16 +2313,16 @@ bool SendMessages(CNode* pto, CConnman& connman, std::atomic<bool>& interruptMsg
         // Message: ping
         //
         bool pingSend = false;
-        if (pto->fPingQueued) {
+        if (pto->fPingQueued) {//用户要求ping所有连接节点
             // RPC ping request by user
             pingSend = true;
-        }
+        }//nPingNonceSent 接受到　PONG  会　＝　０
         if (pto->nPingNonceSent == 0 && pto->nPingUsecStart + PING_INTERVAL * 1000000 < GetTimeMicros()) {
-            // Ping automatically sent as a latency probe & keepalive.
+            // Ping automatically sent as a latency probe & keepalive.　定时发送　ping
             pingSend = true;
         }
-        if (pingSend) {
-            uint64_t nonce = 0;
+        if (pingSend) {//发送　ping
+            uint64_t nonce = 0;//随机值
             while (nonce == 0) {
                 GetRandBytes((unsigned char*)&nonce, sizeof(nonce));
             }
@@ -2341,27 +2343,27 @@ bool SendMessages(CNode* pto, CConnman& connman, std::atomic<bool>& interruptMsg
             return true;
 
         // Address refresh broadcast
-        int64_t nNow = GetTimeMicros();
+        int64_t nNow = GetTimeMicros(); //IsInitialBlockDownload 判断是否初始化块成功
         if (!IsInitialBlockDownload() && pto->nNextLocalAddrSend < nNow) {
-            AdvertiseLocal(pto);
+            AdvertiseLocal(pto);//添加本机地址到准备发送的地址列表
             pto->nNextLocalAddrSend = PoissonNextSend(nNow, AVG_LOCAL_ADDRESS_BROADCAST_INTERVAL);
         }
 
         //
         // Message: addr
-        //
-        if (pto->nNextAddrSend < nNow) {
+        //发送本机连接地址，必须是有效的
+        if (pto->nNextAddrSend < nNow) {//vAddrToSend 注意本机收到地址，会添加到这个里面，但是广播过了，就不广播了
             pto->nNextAddrSend = PoissonNextSend(nNow, AVG_ADDRESS_BROADCAST_INTERVAL);
             vector<CAddress> vAddr;
             vAddr.reserve(pto->vAddrToSend.size());
             BOOST_FOREACH(const CAddress& addr, pto->vAddrToSend)
             {
-                if (!pto->addrKnown.contains(addr.GetKey()))
+                if (!pto->addrKnown.contains(addr.GetKey()))//已经广播过了
                 {
                     pto->addrKnown.insert(addr.GetKey());
                     vAddr.push_back(addr);
                     // receiver rejects addr messages larger than 1000
-                    if (vAddr.size() >= 1000)
+                    if (vAddr.size() >= 1000)//每次最多广播1000条地址
                     {
                         connman.PushMessage(pto, NetMsgType::ADDR, vAddr);
                         vAddr.clear();
@@ -2374,21 +2376,21 @@ bool SendMessages(CNode* pto, CConnman& connman, std::atomic<bool>& interruptMsg
         }
 
         CNodeState &state = *State(pto->GetId());
-        if (state.fShouldBan) {
-            if (pto->fWhitelisted)
+        if (state.fShouldBan) {//如果某个连接到达禁止计数，将断开连接
+            if (pto->fWhitelisted)//如果是白名单，不处理
                 LogPrintf("Warning: not punishing whitelisted peer %s!\n", pto->addr.ToString());
             else {
-                pto->fDisconnect = true;
-                if (pto->addr.IsLocal())
+                pto->fDisconnect = true;//断开连接
+                if (pto->addr.IsLocal())//如果是本地不处理
                     LogPrintf("Warning: not banning local peer %s!\n", pto->addr.ToString());
                 else
                 {
-                    connman.Ban(pto->addr, BanReasonNodeMisbehaving);
+                    connman.Ban(pto->addr, BanReasonNodeMisbehaving);//通知连接，阻止　写盘
                 }
             }
-            state.fShouldBan = false;
+            state.fShouldBan = false;//重置状态
         }
-
+        //PeerLogicValidation::BlockChecked 收到块并检查后，会通知到所有连接，如果是拒绝的块会写入　rejects
         BOOST_FOREACH(const CBlockReject& reject, state.rejects)
             connman.PushMessage(pto, NetMsgType::REJECT, (string)NetMsgType::BLOCK, reject.chRejectCode, reject.strRejectReason, reject.hashBlock);
         state.rejects.clear();

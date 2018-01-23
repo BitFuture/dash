@@ -31,7 +31,7 @@ public:
 };
 
 struct CNodeStateStats {
-    int nMisbehavior;
+    int nMisbehavior;//阻止某个连接的计数器，当阻止计数达到阈值，这个连接认为是攻击或无效节点
     int nSyncHeight;
     int nCommonHeight;
     std::vector<int> vHeightInFlight;

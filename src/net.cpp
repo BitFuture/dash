@@ -76,7 +76,7 @@ bool fDiscover = true;
 bool fListen = true;
 bool fRelayTxes = true;
 CCriticalSection cs_mapLocalHost;
-std::map<CNetAddr, LocalServiceInfo> mapLocalHost;
+std::map<CNetAddr, LocalServiceInfo> mapLocalHost;//本机ip
 static bool vfLimited[NET_MAX] = {};
 static CNode* pnodeLocalHost = NULL;
 std::string strSubVersion;
@@ -89,7 +89,7 @@ limitedmap<uint256, int64_t> mapAlreadyAskedFor(MAX_INV_SZ);
 // Signals for message handling
 static CNodeSignals g_signals;
 CNodeSignals& GetNodeSignals() { return g_signals; }
-
+//-seednode
 void CConnman::AddOneShot(const std::string& strDest)
 {
     LOCK(cs_vOneShots);
@@ -523,30 +523,30 @@ void CConnman::Ban(const CSubNet& subNet, const BanReason &banReason, int64_t ba
     banEntry.banReason = banReason;
     if (bantimeoffset <= 0)
     {
-        bantimeoffset = GetArg("-bantime", DEFAULT_MISBEHAVING_BANTIME);
+        bantimeoffset = GetArg("-bantime", DEFAULT_MISBEHAVING_BANTIME);//24小时
         sinceUnixEpoch = false;
     }
-    banEntry.nBanUntil = (sinceUnixEpoch ? 0 : GetTime() )+bantimeoffset;
+    banEntry.nBanUntil = (sinceUnixEpoch ? 0 : GetTime() )+bantimeoffset;//阻止时间，读盘的时候会解除阻止
 
     {
-        LOCK(cs_setBanned);
+        LOCK(cs_setBanned);//添加到阻止列表
         if (setBanned[subNet].nBanUntil < banEntry.nBanUntil) {
             setBanned[subNet] = banEntry;
-            setBannedIsDirty = true;
+            setBannedIsDirty = true;//通知写盘
         }
         else
             return;
     }
     if(clientInterface)
-        clientInterface->BannedListChanged();
+        clientInterface->BannedListChanged();//通知界面刷新
     {
         LOCK(cs_vNodes);
-        BOOST_FOREACH(CNode* pnode, vNodes) {
+        BOOST_FOREACH(CNode* pnode, vNodes) {//所有连接，都断开与这个地址相关的
             if (subNet.Match((CNetAddr)pnode->addr))
                 pnode->fDisconnect = true;
         }
-    }
-    if(banReason == BanReasonManuallyAdded)
+    } 
+    if(banReason == BanReasonManuallyAdded)//手动阻止
         DumpBanlist(); //store banlist to disk immediately if user requested ban
 }
 
@@ -1104,7 +1104,14 @@ void CConnman::AcceptConnection(const ListenSocket& hListenSocket) {
         vNodes.push_back(pnode);
     }
 }
-
+//Send and receive from sockets, accept connections
+//判断是否有连接断开，删除之
+//计算等待别人连接的 socket
+//判断所有连接的读写状态
+//超时等待新的连接
+//接受数据，对合法数据分发消息，否则断开连接
+//发送数据
+//对超过一定时长没有接受或者发送的，断开连接
 void CConnman::ThreadSocketHandler()
 {
     unsigned int nPrevNodeCount = 0;
@@ -1119,7 +1126,7 @@ void CConnman::ThreadSocketHandler()
             std::vector<CNode*> vNodesCopy = vNodes;
             BOOST_FOREACH(CNode* pnode, vNodesCopy)
             {
-                if (pnode->fDisconnect)
+                if (pnode->fDisconnect)//如果断开连接
                 {
                     LogPrintf("ThreadSocketHandler -- removing node: peer=%d addr=%s nRefCount=%d fNetworkNode=%d fInbound=%d fMasternode=%d\n",
                               pnode->id, pnode->addr.ToString(), pnode->GetRefCount(), pnode->fNetworkNode, pnode->fInbound, pnode->fMasternode);
@@ -1146,7 +1153,7 @@ void CConnman::ThreadSocketHandler()
         {
             // Delete disconnected nodes
             std::list<CNode*> vNodesDisconnectedCopy = vNodesDisconnected;
-            BOOST_FOREACH(CNode* pnode, vNodesDisconnectedCopy)
+            BOOST_FOREACH(CNode* pnode, vNodesDisconnectedCopy)//清理没有连接的节点
             {
                 // wait until threads are done using it
                 if (pnode->GetRefCount() <= 0)
@@ -1174,7 +1181,7 @@ void CConnman::ThreadSocketHandler()
             LOCK(cs_vNodes);
             vNodesSize = vNodes.size();
         }
-        if(vNodesSize != nPrevNodeCount) {
+        if(vNodesSize != nPrevNodeCount) {//通知连接节点数变了
             nPrevNodeCount = vNodesSize;
             if(clientInterface)
                 clientInterface->NotifyNumConnectionsChanged(nPrevNodeCount);
@@ -1204,7 +1211,7 @@ void CConnman::ThreadSocketHandler()
 
         {
             LOCK(cs_vNodes);
-            BOOST_FOREACH(CNode* pnode, vNodes)
+            BOOST_FOREACH(CNode* pnode, vNodes)//根据数据设置 接受或者发送数据 状态，后面发送，接受根据状态来
             {
                 if (pnode->hSocket == INVALID_SOCKET)
                     continue;
@@ -1237,7 +1244,7 @@ void CConnman::ThreadSocketHandler()
                 }
             }
         }
-
+        //看看有没有人连接自己 指定连接 hSocketMax 递增
         int nSelect = select(have_fds ? hSocketMax + 1 : 0,
                              &fdsetRecv, &fdsetSend, &fdsetError, &timeout);
         if (interruptNet)
@@ -1254,14 +1261,14 @@ void CConnman::ThreadSocketHandler()
             }
             FD_ZERO(&fdsetSend);
             FD_ZERO(&fdsetError);
-            if (!interruptNet.sleep_for(std::chrono::milliseconds(timeout.tv_usec/1000)))
+            if (!interruptNet.sleep_for(std::chrono::milliseconds(timeout.tv_usec/1000))) //没有连接，等待终端或者固定时间
                 return;
         }
 
         //
         // Accept new connections
         //
-        BOOST_FOREACH(const ListenSocket& hListenSocket, vhListenSocket)
+        BOOST_FOREACH(const ListenSocket& hListenSocket, vhListenSocket)//接受连接
         {
             if (hListenSocket.socket != INVALID_SOCKET && FD_ISSET(hListenSocket.socket, &fdsetRecv))
             {
@@ -1289,7 +1296,7 @@ void CConnman::ThreadSocketHandler()
                     {
                         // typical socket buffer is 8K-64K
                         char pchBuf[0x10000];
-                        int nBytes = recv(pnode->hSocket, pchBuf, sizeof(pchBuf), MSG_DONTWAIT);
+                        int nBytes = recv(pnode->hSocket, pchBuf, sizeof(pchBuf), MSG_DONTWAIT);//接受数据
                         if (nBytes > 0)
                         {
                             bool notify = false;
@@ -1308,9 +1315,9 @@ void CConnman::ThreadSocketHandler()
                                     LOCK(pnode->cs_vProcessMsg);
                                     pnode->vProcessMsg.splice(pnode->vProcessMsg.end(), pnode->vRecvMsg, pnode->vRecvMsg.begin(), it);
                                     pnode->nProcessQueueSize += nSizeAdded;
-                                    pnode->fPauseRecv = pnode->nProcessQueueSize > nReceiveFloodSize;
+                                    pnode->fPauseRecv = pnode->nProcessQueueSize > nReceiveFloodSize;//是否暂停接受，接手池子满了
                                 }
-                                WakeMessageHandler();
+                                WakeMessageHandler();//通知执行消息
                             }
                         }
                         else if (nBytes == 0)
@@ -1354,7 +1361,7 @@ void CConnman::ThreadSocketHandler()
             //
             // Inactivity checking
             //
-            int64_t nTime = GetSystemTimeInSeconds();
+            int64_t nTime = GetSystemTimeInSeconds();//超过一定时间没有处理，就认为连接中断了
             if (nTime - pnode->nTimeConnected > 60)
             {
                 if (pnode->nLastRecv == 0 || pnode->nLastSend == 0)
@@ -1517,17 +1524,17 @@ void MapPort(bool)
 
 
 
-
+//主要处理程序中写死的种子节点
 void CConnman::ThreadDNSAddressSeed()
 {
     // goal: only query DNS seeds if address need is acute
-    if ((addrman.size() > 0) &&
-        (!GetBoolArg("-forcednsseed", DEFAULT_FORCEDNSSEED))) {
+    if ((addrman.size() > 0) && //addrman 为上次记录的连接地址
+        (!GetBoolArg("-forcednsseed", DEFAULT_FORCEDNSSEED))) {//如果不是强制连接 等待11秒
         if (!interruptNet.sleep_for(std::chrono::seconds(11)))
             return;
 
         LOCK(cs_vNodes);
-        if (vNodes.size() >= 2) {
+        if (vNodes.size() >= 2) {//如果连接数已经大于2 就不需要种子了
             LogPrintf("P2P peers available. Skipped DNS seeding.\n");
             return;
         }
@@ -1539,12 +1546,12 @@ void CConnman::ThreadDNSAddressSeed()
     LogPrintf("Loading addresses from DNS seeds (could take a while)\n");
 
     BOOST_FOREACH(const CDNSSeedData &seed, vSeeds) {
-        if (HaveNameProxy()) {
+        if (HaveNameProxy()) {//如果启动代理  加入到 OneSeed按照 -seednode处理 
             AddOneShot(seed.host);
         } else {
             std::vector<CNetAddr> vIPs;
             std::vector<CAddress> vAdd;
-            if (LookupHost(seed.host.c_str(), vIPs, 0, true))
+            if (LookupHost(seed.host.c_str(), vIPs, 0, true))//找到地址
             {
                 BOOST_FOREACH(const CNetAddr& ip, vIPs)
                 {
@@ -1559,7 +1566,7 @@ void CConnman::ThreadDNSAddressSeed()
             // addrman assigning the same source to results from different seeds.
             // This should switch to a hard-coded stable dummy IP for each seed name, so that the
             // resolve is not required at all.
-            if (!vIPs.empty()) {
+            if (!vIPs.empty()) {//计算有效 seed 加入到　addrman
                 CService seedSource;
                 Lookup(seed.name.c_str(), seedSource, 0, true);
                 addrman.Add(vAdd, seedSource);
@@ -1615,7 +1622,9 @@ void CConnman::ProcessOneShot()
             AddOneShot(strDest);
     }
 }
-
+//这个应该是不停的循环连接，包括触须，别人广播过来的地址
+//NetMsgType::ADDR 会广播过来地址，　connman.AddNewAddress　会添加地址，重新连接
+//主机发送网络消息的时候　检查　AVG_ADDRESS_BROADCAST_INTERVAL　会把有效地址广播一次
 void CConnman::ThreadOpenConnections()
 {
     // Connect to specific addresses
@@ -1623,6 +1632,7 @@ void CConnman::ThreadOpenConnections()
     {
         for (int64_t nLoop = 0;; nLoop++)
         {
+            //-seednode OneShot 里面连接种子节点
             ProcessOneShot();
             BOOST_FOREACH(const std::string& strAddr, mapMultiArgs["-connect"])
             {
@@ -1745,7 +1755,7 @@ void CConnman::ThreadOpenConnections()
             break;
         }
 
-        if (addrConnect.IsValid()) {
+        if (addrConnect.IsValid()) {//等待个随机值
 
             if (fFeeler) {
                 // Add small amount of random noise before connection to avoid synchronization.
@@ -1821,6 +1831,7 @@ void CConnman::ThreadOpenAddedConnections()
 
     for (unsigned int i = 0; true; i++)
     {
+        //vAddedNodes 从中取得信息，如果已经连接了，则去掉已经连接的节点信息　啥时候退出？？　interruptNet　中断
         std::vector<AddedNodeInfo> vInfo = GetAddedNodeInfo();
         for (const AddedNodeInfo& info : vInfo) {
             if (!info.fConnected) {
@@ -1837,7 +1848,7 @@ void CConnman::ThreadOpenAddedConnections()
             return;
     }
 }
-
+//主节点连接线程
 void CConnman::ThreadMnbRequestConnections()
 {
     // Connecting to specific addresses, no masternode connections available
@@ -1914,7 +1925,7 @@ bool CConnman::OpenNetworkConnection(const CAddress& addrConnect, CSemaphoreGran
 
     return true;
 }
-
+//消息处理线程
 void CConnman::ThreadMessageHandler()
 {
     SetThreadPriority(THREAD_PRIORITY_BELOW_NORMAL);
@@ -2005,7 +2016,7 @@ bool CConnman::BindListenPort(const CService &addrBind, std::string& strError, b
     setsockopt(hListenSocket, IPPROTO_TCP, TCP_NODELAY, (const char*)&nOne, sizeof(int));
 #endif
 
-    // Set to non-blocking, incoming connections will also inherit this
+    // Set to non-blocking, incoming connections will also inherit this //网络异步模式
     if (!SetSocketNonBlocking(hListenSocket, true)) {
         strError = strprintf("BindListenPort: Setting listening socket to non-blocking failed, error %s\n", NetworkErrorString(WSAGetLastError()));
         LogPrintf("%s\n", strError);
@@ -2175,7 +2186,7 @@ bool CConnman::Start(CScheduler& scheduler, std::string& strNodeError, Options c
     clientInterface = connOptions.uiInterface;
     if (clientInterface)
         clientInterface->InitMessage(_("Loading addresses..."));
-    // Load addresses from peers.dat
+    // Load addresses from peers.dat //上次保存的有效连接ip
     int64_t nStart = GetTimeMillis();
     {
         CAddrDB adb;
@@ -2193,7 +2204,7 @@ bool CConnman::Start(CScheduler& scheduler, std::string& strNodeError, Options c
     nStart = GetTimeMillis();
     CBanDB bandb;
     banmap_t banmap;
-    if (bandb.Read(banmap)) {
+    if (bandb.Read(banmap)) {//非法并禁止的ip
         SetBanned(banmap); // thread save setter
         SetBannedSetDirty(false); // no need to write down, just read data
         SweepBanned(); // sweep out unused entries
@@ -2220,7 +2231,7 @@ bool CConnman::Start(CScheduler& scheduler, std::string& strNodeError, Options c
 
     if (pnodeLocalHost == NULL) {
         CNetAddr local;
-        LookupHost("127.0.0.1", local, false);
+        LookupHost("127.0.0.1", local, false);// nLocalServices 貌似参数传错啦
         pnodeLocalHost = new CNode(GetNewNodeId(), nLocalServices, GetBestHeight(), INVALID_SOCKET, CAddress(CService(local, 0), nLocalServices));
         GetNodeSignals().InitializeNode(pnodeLocalHost, *this);
     }
@@ -2240,15 +2251,15 @@ bool CConnman::Start(CScheduler& scheduler, std::string& strNodeError, Options c
     // Send and receive from sockets, accept connections
     threadSocketHandler = std::thread(&TraceThread<std::function<void()> >, "net", std::function<void()>(std::bind(&CConnman::ThreadSocketHandler, this)));
 
-    if (!GetBoolArg("-dnsseed", true))
+    if (!GetBoolArg("-dnsseed", true))  //如果已经指定　seed 程序中写死的种子就无效
         LogPrintf("DNS seeding disabled\n");
-    else
+    else//把程序中写死的 DNS转化为 addrman 
         threadDNSAddressSeed = std::thread(&TraceThread<std::function<void()> >, "dnsseed", std::function<void()>(std::bind(&CConnman::ThreadDNSAddressSeed, this)));
 
     // Initiate outbound connections from -addnode
     threadOpenAddedConnections = std::thread(&TraceThread<std::function<void()> >, "addcon", std::function<void()>(std::bind(&CConnman::ThreadOpenAddedConnections, this)));
 
-    // Initiate outbound connections
+    // Initiate outbound connections　　这个主要处理地址列表，从其他种子广播过来的地址，也在这里连接
     threadOpenConnections = std::thread(&TraceThread<std::function<void()> >, "opencon", std::function<void()>(std::bind(&CConnman::ThreadOpenConnections, this)));
 
     // Initiate masternode connections
@@ -2257,7 +2268,7 @@ bool CConnman::Start(CScheduler& scheduler, std::string& strNodeError, Options c
     // Process messages
     threadMessageHandler = std::thread(&TraceThread<std::function<void()> >, "msghand", std::function<void()>(std::bind(&CConnman::ThreadMessageHandler, this)));
 
-    // Dump network addresses
+    // Dump network addresses　　隔断时间写　地址到数据库
     scheduler.scheduleEvery(boost::bind(&CConnman::DumpData, this), DUMP_ADDRESSES_INTERVAL);
 
     return true;
@@ -2686,7 +2697,7 @@ CNode::CNode(NodeId idIn, ServiceFlags nLocalServicesIn, int nMyStartingHeightIn
     fOneShot = false;
     fClient = false; // set by version message
     fFeeler = false;
-    fInbound = fInboundIn;
+    fInbound = fInboundIn;//主动连接别人的时候　false true 本地都为　false　被别人连接的时候　true false
     fNetworkNode = fNetworkNodeIn;
     fSuccessfullyConnected = false;
     fDisconnect = false;

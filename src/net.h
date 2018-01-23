@@ -462,16 +462,16 @@ private:
 
     std::vector<ListenSocket> vhListenSocket;
     bool fNetworkActive;
-    banmap_t setBanned;
+    banmap_t setBanned;//被阻止的连接地址，写数据库，有阻止时间，到时间下次启动的时候解除阻止　RPC 可以清除　　ClearBanned
     CCriticalSection cs_setBanned;
-    bool setBannedIsDirty;
+    bool setBannedIsDirty;//阻止列表发生变化，写数据库
     bool fAddressesInitialized;
-    CAddrMan addrman;
-    std::deque<std::string> vOneShots;
+    CAddrMan addrman;//地址管理器，初始化的时候，从数据库中读出来的 DNS非 Proxy 也会加进来
+    std::deque<std::string> vOneShots;// -seednode 加进来的地址，如果用 Proxy DNS 也会转过来　只联机的一次
     CCriticalSection cs_vOneShots;
-    std::vector<std::string> vAddedNodes;
+    std::vector<std::string> vAddedNodes;//-addnode 传递进来的地址
     CCriticalSection cs_vAddedNodes;
-    std::vector<CNode*> vNodes;
+    std::vector<CNode*> vNodes;//已经连接好的节点
     std::list<CNode*> vNodesDisconnected;
     mutable CCriticalSection cs_vNodes;
     std::atomic<NodeId> nLastNodeId;
@@ -697,10 +697,10 @@ public:
     std::string strSubVer, cleanSubVer;
     bool fWhitelisted; // This peer can bypass DoS banning.
     bool fFeeler; // If true this node is being used as a short lived feeler.
-    bool fOneShot;
-    bool fClient;
-    bool fInbound;
-    bool fNetworkNode;
+    bool fOneShot;    //一次性连接
+    bool fClient;     //非NETWORK连接类型
+    bool fInbound;    //主动连接别人的时候　false 被别人连接 true 本地为　false　　 
+    bool fNetworkNode;//主动连接别人的时候　 true 被别人连接的时候　　false　本地都为　false　　
     std::atomic_bool fSuccessfullyConnected;
     bool fDisconnect;
     // We use fRelayTxes for two purposes -
@@ -729,12 +729,12 @@ public:
     int nStartingHeight;
 
     // flood relay
-    std::vector<CAddress> vAddrToSend;
-    CRollingBloomFilter addrKnown;
+    std::vector<CAddress> vAddrToSend;//准备发送广播的地址列表
+    CRollingBloomFilter addrKnown;//已经广播过或者接受过的地址，避免胡乱接受或者广播
     bool fGetAddr;
     std::set<uint256> setKnown;
-    int64_t nNextAddrSend;
-    int64_t nNextLocalAddrSend;
+    int64_t nNextAddrSend;//定期广播本机连接地址的时间
+    int64_t nNextLocalAddrSend;//定期广播本机连接地址的时间
 
     // inventory based relay
     CRollingBloomFilter filterInventoryKnown;
@@ -756,15 +756,15 @@ public:
 
     // Ping time measurement:
     // The pong reply we're expecting, or 0 if no pong expected.
-    uint64_t nPingNonceSent;
+    uint64_t nPingNonceSent;//发送PIN的随机值，在收到 PONG的时候检查
     // Time (in usec) the last ping was sent, or 0 if no ping was ever sent.
-    int64_t nPingUsecStart;
+    int64_t nPingUsecStart;//发送 PING的时间
     // Last measured round-trip time.
-    int64_t nPingUsecTime;
+    int64_t nPingUsecTime;//发送时间间隔
     // Best measured round-trip time.
-    int64_t nMinPingUsecTime;
+    int64_t nMinPingUsecTime;//发送PING的最小时间间隔
     // Whether a ping is requested.
-    bool fPingQueued;
+    bool fPingQueued;//RPC user 强制PING状态
 
     std::vector<unsigned char> vchKeyedNetGroup;
 
