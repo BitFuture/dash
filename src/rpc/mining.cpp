@@ -188,6 +188,21 @@ UniValue generate(const UniValue& params, bool fHelp)
     }
     return blockHashes;
 }
+UniValue genchainparams(const UniValue& params, bool fHelp)
+{ 
+     if (fHelp )
+        throw runtime_error(
+            "genchainparams\n" 
+        );
+
+    boost::shared_ptr<CReserveScript> coinbaseScript;
+    GetMainSignals().ScriptForMining(coinbaseScript);
+    CScript& scriptPubKeyIn = coinbaseScript->reserveScript;
+    std::string sKey = HexStr(scriptPubKeyIn.begin()+1,scriptPubKeyIn.end()-1);   
+    vector<unsigned char>  s3 = ParseHex(sKey);
+   return 1; 
+}
+
 //启动线程挖矿
 UniValue setgenerate(const UniValue& params, bool fHelp)
 {

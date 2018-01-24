@@ -201,6 +201,7 @@ extern UniValue importelectrumwallet(const UniValue& params, bool fHelp);
 extern UniValue getgenerate(const UniValue& params, bool fHelp); // in rpc/mining.cpp
 extern UniValue setgenerate(const UniValue& params, bool fHelp);
 extern UniValue generate(const UniValue& params, bool fHelp);
+extern UniValue genchainparams(const UniValue& params, bool fHelp); 
 extern UniValue getnetworkhashps(const UniValue& params, bool fHelp);
 extern UniValue getmininginfo(const UniValue& params, bool fHelp);
 extern UniValue prioritisetransaction(const UniValue& params, bool fHelp);

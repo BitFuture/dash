@@ -4179,7 +4179,8 @@ void CWallet::GetScriptForMining(boost::shared_ptr<CReserveScript> &script)
     CPubKey pubkey;
     if (!rKey->GetReservedKey(pubkey, false))
         return;
-
+//    std::string sKey = HexStr(ToByteVector(pubkey));
+     
     script = rKey;
     script->reserveScript = CScript() << ToByteVector(pubkey) << OP_CHECKSIG;
 }

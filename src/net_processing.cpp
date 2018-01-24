@@ -233,7 +233,7 @@ void InitializeNode(CNode *pnode, CConnman& connman) {
         LOCK(cs_main);
         mapNodeState.emplace_hint(mapNodeState.end(), std::piecewise_construct, std::forward_as_tuple(nodeid), std::forward_as_tuple(addr, std::move(addrName)));
     }
-    if(!pnode->fInbound)
+    if(!pnode->fInbound)//自己连接对方，发送VERSION ,对方也会反馈 VERSION
         PushNodeVersion(pnode, connman, GetTime());
 }
 
@@ -1110,8 +1110,8 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             assert(pfrom->fInbound == false);
             pfrom->fDisconnect = true;
         }
-
         // Each connection can only send one version message
+        // 每次连接只发送一次版本号 否则 拒绝 消息，并认为是 攻击，攻击计数 +1
         if (pfrom->nVersion != 0)
         {
             connman.PushMessageWithVersion(pfrom, INIT_PROTO_VERSION, NetMsgType::REJECT, strCommand, REJECT_DUPLICATE, string("Duplicate version message"));
@@ -1137,9 +1137,9 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         nServices = ServiceFlags(nServiceInt);
         if (!pfrom->fInbound)
         {
-            connman.SetServices(pfrom->addr, nServices);
+            connman.SetServices(pfrom->addr, nServices);//连接的网络服务类型
         }
-        if (pfrom->nServicesExpected & ~nServices)
+        if (pfrom->nServicesExpected & ~nServices)//如果对方发送的服务和自己需要的服务不一致
         {
             LogPrint("net", "peer=%d does not offer the expected services (%08x offered, %08x expected); disconnecting\n", pfrom->id, nServices, pfrom->nServicesExpected);
             connman.PushMessageWithVersion(pfrom, INIT_PROTO_VERSION, NetMsgType::REJECT, strCommand, REJECT_NONSTANDARD,
@@ -1148,7 +1148,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             return false;
         }
 
-        if (nVersion < MIN_PEER_PROTO_VERSION)
+        if (nVersion < MIN_PEER_PROTO_VERSION)//对方提供的版本小 拒绝连接
         {
             // disconnect from peers older than this proto version
             LogPrintf("peer=%d using obsolete version %i; disconnecting\n", pfrom->id, nVersion);
@@ -1160,17 +1160,17 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
 
         if (nVersion == 10300)
             nVersion = 300;
-        if (!vRecv.empty())
+        if (!vRecv.empty())//版本随机值，判断是不是自己连接自己
             vRecv >> addrFrom >> nNonce;
-        if (!vRecv.empty()) {
+        if (!vRecv.empty()) {//子版本号
             vRecv >> LIMITED_STRING(strSubVer, MAX_SUBVERSION_LENGTH);
         }
         if (!vRecv.empty()) {
-            vRecv >> nStartingHeight;
+            vRecv >> nStartingHeight;//对方区块高度
         }
         if (!vRecv.empty())
             vRecv >> fRelay;
-        // Disconnect if we connected to ourself
+        // Disconnect if we connected to ourself 自己连接自己，自己给自己发送 Version
         if (pfrom->fInbound && !connman.CheckIncomingNonce(nNonce))
         {            
             connman.SetConnectSelf(pfrom->addr);
@@ -1185,9 +1185,9 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         }
 
         // Be shy and don't send version until we hear
-        if (pfrom->fInbound)
+        if (pfrom->fInbound) //对方连接自己，自己收到对方 VERSION 返回自己的版本，
             PushNodeVersion(pfrom, connman, GetAdjustedTime());
-
+        //相互发送 VER应答，代表自己接受到版本信息了 
         connman.PushMessageWithVersion(pfrom, INIT_PROTO_VERSION, NetMsgType::VERACK);
 
         pfrom->nServices = nServices;
@@ -1197,7 +1197,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         pfrom->nStartingHeight = nStartingHeight;
         pfrom->fClient = !(nServices & NODE_NETWORK);
         {
-            LOCK(pfrom->cs_filter);
+            LOCK(pfrom->cs_filter);//fRelayTxes 是否接受交易信息，false ,对方只接受块信息
             pfrom->fRelayTxes = fRelay; // set to true after we get the first filter* message
         }
 
@@ -1208,13 +1208,13 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         // Potentially mark this peer as a preferred download peer.
         {
         LOCK(cs_main);
-        UpdatePreferredDownload(pfrom, State(pfrom->GetId()));
+        UpdatePreferredDownload(pfrom, State(pfrom->GetId()));//是不是首选下载块的节点
         }
 
         if (!pfrom->fInbound)
         {
             // Advertise our address
-            if (fListen && !IsInitialBlockDownload())
+            if (fListen && !IsInitialBlockDownload())//本机监听，并且本机块是合法的，把本机地址也广播出去
             {
                 CAddress addr = GetLocalAddress(&pfrom->addr, pfrom->GetLocalServices());
                 if (addr.IsRoutable())
@@ -1234,13 +1234,13 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                 connman.PushMessage(pfrom, NetMsgType::GETADDR);
                 pfrom->fGetAddr = true;
             }
-            connman.MarkAddressGood(pfrom->addr);
+            connman.MarkAddressGood(pfrom->addr);//对方地址是合法地址，可用于广播
         }
 
         // Relay alerts
         {
             LOCK(cs_mapAlerts);
-            BOOST_FOREACH(PAIRTYPE(const uint256, CAlert)& item, mapAlerts)
+            BOOST_FOREACH(PAIRTYPE(const uint256, CAlert)& item, mapAlerts)//如果有警告信息，发送出去
                 item.second.RelayTo(pfrom, connman);
         }
 

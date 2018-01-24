@@ -1714,7 +1714,10 @@ void CConnman::ThreadOpenConnections()
         //  * Start attempting feeler connections only after node finishes making outbound 
         //    connections.
         //  * Only make a feeler connection once every few minutes.
-        //
+        // 这个很有意思，随机抽取一个地址连接，如果对方发回 VERSION
+        // 在 version 中向对方广播地址，同时自己地址少的时候，向对方要地址。
+        // 整个处理流程都在 if (strCommand == NetMsgType::VERSION)    // Advertise our address
+        // 同时会在这个流程中关闭连接
         bool fFeeler = false;
         if (nOutbound >= nMaxOutbound) {//当达到最大对外连接数目
             int64_t nTime = GetTimeMicros(); // The current time right now (in microseconds).

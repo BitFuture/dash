@@ -57,8 +57,8 @@ static CBlock CreateGenesisBlock(uint32_t nTime, uint32_t nNonce, uint32_t nBits
 }
 static CBlock CreateGenesisBlockEric(uint32_t nTime, uint32_t nNonce, uint32_t nBits, int32_t nVersion, const CAmount& genesisReward)
 {
-    const char* pszTimestamp = "Wired 01/Jan/2018 NewPay published New coin";
-    const CScript genesisOutputScript = CScript() << ParseHex("040184710fa689ad5023690c80f3a49c8f13f8d45b8c857fbcbc8bc4a8e4d3eb4b10f4d4604fa08dce601aaf0f470216fe1b51850b4acf21b179c45070ac7b03a9") << OP_CHECKSIG;
+    const char* pszTimestamp = "Wired 24/Jan/2018 NewPay published New coin";
+    const CScript genesisOutputScript = CScript() << ParseHex("0335e19f9c88455885d8e2469bf8c8bf0faaaf2ab257e71520b31e76edaaff5d73") << OP_CHECKSIG;
     return CreateGenesisBlock(pszTimestamp, genesisOutputScript, nTime, nNonce, nBits, nVersion, genesisReward);
 }
 #include "arith_uint256.h"
@@ -75,8 +75,7 @@ static void MinerGenesisBlockEric(CBlock *pblock)
             { 
                    break;
             }
-            pblock->nNonce += 1;
-            assert(0);
+            pblock->nNonce += 1;          
             iNonce ++;
                  
         }
@@ -306,26 +305,38 @@ public:
         nDelayGetHeadersTime = 24 * 60 * 60;
         nPruneAfterHeight = 100000;
 
+       //"-reindex=1"       
+       //删除 数据
+       //启动 命令行 genchainparams, 通过 void CWallet::GetScriptForMining(boost::shared_ptr<CReserveScript> &script) 取得公钥
+       //修改  genesisOutputScript 为对应公钥，旷世奖励为自己
+       //修改旷世描述 pszTimestamp
+       //修改时间
+       //MinerGenesisBlockEric 计算 nonce
+       //计算   hashGenesisBlock hashMerkleRoot
+       //删除 blocks
+       //"-reindex=1" 作为参数启动
+
 
        //1514736000 2018-01-01  通过网站转当前时间为 unix时间戳　
-     /*uint32_t uGenesisTime = GetThisTime(2018,1,1,0,0,0);
-       genesis = CreateGenesisBlockEric(uGenesisTime, 1797646, 0x1e0ffff0, 2, 50 * COIN);
+        uint32_t uGenesisTime = GetThisTime(2018,1,24,0,0,0);
+        genesis = CreateGenesisBlockEric(uGenesisTime, 2832721, 0x1e0ffff0, 2, 50 * COIN);
         MinerGenesisBlockEric(&genesis);
   
-        consensus.hashGenesisBlock = genesis.GetHash();
-
-        LogPrintf("==== %s %s %d\n",genesis.hashMerkleRoot.ToString(),consensus.hashGenesisBlock.ToString(),genesis.nNonce);
-       std::string strHash = consensus.hashGenesisBlock.ToString();
-       */
-    
+        consensus.hashGenesisBlock = genesis.GetHash();  
+        assert(consensus.hashGenesisBlock == uint256S("0x00000c8b0036cadbcbb62f4257c10f16c9aaca09820fe0f79ef2544f567fd8b9"));
+        assert(genesis.hashMerkleRoot == uint256S("0x68dc6badedd07e987ef98a0491c09a9fc239ef5ea8bbf10ff85df6bf108daf09"));     
+        std::string strHash1 = consensus.hashGenesisBlock.ToString();
+        std::string strHash2 = genesis.hashMerkleRoot.ToString();
+       
+    /*
         genesis = CreateGenesisBlock(1390095618, 28917698, 0x1e0ffff0, 1, 50 * COIN);
         consensus.hashGenesisBlock = genesis.GetHash();
         assert(consensus.hashGenesisBlock == uint256S("0x00000ffd590b1485b3caadc19b22e6379c733355108f107a430458cdf3407ab6"));
         assert(genesis.hashMerkleRoot == uint256S("0xe0028eb9648db56b1ac77cf090b99048a8007e2bb64b68f092c03c7f56a662c7"));
-
+                                                     00000c8b0036cadbcbb62f4257c10f16c9aaca09820fe0f79ef2544f567fd8b9
+*/
   
-        //assert(consensus.hashGenesisBlock == uint256S("0x00000ffd590b1485b3caadc19b22e6379c733355108f107a430458cdf3407ab6"));
-        //assert(genesis.hashMerkleRoot == uint256S("0xe0028eb9648db56b1ac77cf090b99048a8007e2bb64b68f092c03c7f56a662c7"));
+     
 
       //eric
       //  vSeeds.push_back(CDNSSeedData("dash.org", "dnsseed.dash.org"));
