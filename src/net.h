@@ -385,7 +385,8 @@ public:
     void SetBestHeight(int height);
     int GetBestHeight() const;
 
-
+    void  SetConnectSelf(const CAddress &addr);
+    
     unsigned int GetReceiveFloodSize() const;
 private:
     struct ListenSocket {
@@ -780,7 +781,7 @@ private:
     CNode(const CNode&);
     void operator=(const CNode&);
 
-    uint64_t nLocalHostNonce;
+    uint64_t nLocalHostNonce;//本机随机值，主要在 VERSION 消息中检查，是不是自己连自己
     ServiceFlags nLocalServices;
     int nMyStartingHeight;
     int nSendVersion;

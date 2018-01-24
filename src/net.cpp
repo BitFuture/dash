@@ -479,7 +479,10 @@ void CConnman::ClearBanned()
     if(clientInterface)
         clientInterface->BannedListChanged();
 }
-
+void  CConnman::SetConnectSelf(const CAddress &addr)
+{
+    addrman.SetConnectSelf(addr);
+}
 bool CConnman::IsBanned(CNetAddr ip)
 {
     bool fResult = false;
@@ -1302,7 +1305,7 @@ void CConnman::ThreadSocketHandler()
                         {
                             if(pnode->nLastRecv == 0)  
                                addrman.SetConnect(pnode->addr,true);
-                               
+
                             bool notify = false;
                             if (!pnode->ReceiveMsgBytes(pchBuf, nBytes, notify))
                                 pnode->CloseSocketDisconnect();
@@ -1728,7 +1731,8 @@ void CConnman::ThreadOpenConnections()
         while (!interruptNet)
         {
             CAddrInfo addr = addrman.Select(fFeeler);
-
+            if(addr.nConnectSelf>=5)
+                 break;
             // if we selected an invalid address, restart
             if (!addr.IsValid() || setConnected.count(addr.GetGroup()) || IsLocal(addr))
                 break;

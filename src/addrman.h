@@ -28,6 +28,7 @@ public:
     //! last try whatsoever by us (memory only)
     int64_t nLastTry;
     int64_t nDisconnect;
+    int64_t nConnectSelf;
 
 private:
     //! where knowledge about this address first came from
@@ -66,6 +67,7 @@ public:
     {
         nLastSuccess = 0;
         nDisconnect = 0;
+        nConnectSelf = 0;
         nLastTry = 0;
         nAttempts = 0;
         nRefCount = 0;
@@ -574,6 +576,13 @@ public:
            pinfo ->nDisconnect = 0;
         else    
            pinfo ->nDisconnect +=1;
+    }
+    void SetConnectSelf(const CAddress &addr)
+    {        
+        CAddrInfo* pinfo = Find(addr);   
+        if(!pinfo)
+           return;
+        pinfo ->nConnectSelf +=1;
     }
     //! Mark an entry as currently-connected-to.
     void Connected(const CService &addr, int64_t nTime = GetAdjustedTime())
