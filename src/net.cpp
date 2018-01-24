@@ -1696,7 +1696,7 @@ void CConnman::ThreadOpenConnections()
         {
             LOCK(cs_vNodes);
             BOOST_FOREACH(CNode* pnode, vNodes) {
-                if (!pnode->fInbound && !pnode->fMasternode) {
+                if (!pnode->fInbound && !pnode->fMasternode) {//主动连接别人，而且不是主节点
                     setConnected.insert(pnode->addr.GetGroup());
                     nOutbound++;
                 }
@@ -1716,7 +1716,7 @@ void CConnman::ThreadOpenConnections()
         //  * Only make a feeler connection once every few minutes.
         //
         bool fFeeler = false;
-        if (nOutbound >= nMaxOutbound) {
+        if (nOutbound >= nMaxOutbound) {//当达到最大对外连接数目
             int64_t nTime = GetTimeMicros(); // The current time right now (in microseconds).
             if (nTime > nNextFeeler) {
                 nNextFeeler = PoissonNextSend(nTime, FEELER_INTERVAL);
@@ -1731,8 +1731,7 @@ void CConnman::ThreadOpenConnections()
         while (!interruptNet)
         {
             CAddrInfo addr = addrman.Select(fFeeler);
-            if(addr.nConnectSelf>=5)
-                 break;
+          
             // if we selected an invalid address, restart
             if (!addr.IsValid() || setConnected.count(addr.GetGroup()) || IsLocal(addr))
                 break;

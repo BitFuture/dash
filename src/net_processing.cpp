@@ -1106,7 +1106,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
     if (strCommand == NetMsgType::VERSION)
     {
         // Feeler connections exist only to verify if address is online.
-        if (pfrom->fFeeler) {
+        if (pfrom->fFeeler) {//短期尝试连接，一旦收到 Version 直接关闭连接
             assert(pfrom->fInbound == false);
             pfrom->fDisconnect = true;
         }

@@ -386,7 +386,7 @@ public:
     int GetBestHeight() const;
 
     void  SetConnectSelf(const CAddress &addr);
-    
+
     unsigned int GetReceiveFloodSize() const;
 private:
     struct ListenSocket {
@@ -697,8 +697,8 @@ public:
     // the network or wire types and the cleaned string used when displayed or logged.
     std::string strSubVer, cleanSubVer;
     bool fWhitelisted; // This peer can bypass DoS banning.
-    bool fFeeler; // If true this node is being used as a short lived feeler.
-    bool fOneShot;    //一次性连接
+    bool fFeeler; // If true this node is being used as a short lived feeler.//短期尝试连接，一旦收到 Version 直接关闭连接
+    bool fOneShot;    //一次性连接，不再尝试连接
     bool fClient;     //非NETWORK连接类型
     bool fInbound;    //主动连接别人的时候　false 被别人连接 true 本地为　false　　 
     bool fNetworkNode;//主动连接别人的时候　 true 被别人连接的时候　　false　本地都为　false　　
