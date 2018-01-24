@@ -124,6 +124,7 @@ map<string, vector<string> > mapMultiArgs;
 bool fDebug = false;
 bool fPrintToConsole = false;
 bool fPrintToDebugLog = true;
+bool fAllLog = false;
 bool fDaemon = false;
 bool fServer = false;
 string strMiscWarning;
@@ -258,6 +259,9 @@ void OpenDebugLog()
 //判断那些日志可以输出
 bool LogAcceptCategory(const char* category)
 {
+    if(fAllLog)
+      return true;
+      
     if (category != NULL)
     {
         // Give each thread quick access to -debug settings.

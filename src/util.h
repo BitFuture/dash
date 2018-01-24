@@ -65,6 +65,7 @@ extern std::map<std::string, std::vector<std::string> > mapMultiArgs;
 extern bool fDebug;
 extern bool fPrintToConsole;
 extern bool fPrintToDebugLog;
+extern bool fAllLog;
 extern bool fServer;
 extern std::string strMiscWarning;
 extern bool fLogTimestamps;

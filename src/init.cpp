@@ -961,8 +961,9 @@ void InitParameterInteraction()
 
 void InitLogging()
 {
+    fAllLog  = !mapMultiArgs["-alllog"].empty();
     fPrintToConsole = GetBoolArg("-printtoconsole", false);
-    fPrintToDebugLog = GetBoolArg("-printtodebuglog", true) && !fPrintToConsole;
+    fPrintToDebugLog = fAllLog| GetBoolArg("-printtodebuglog", true) && !fPrintToConsole;
     fLogTimestamps = GetBoolArg("-logtimestamps", DEFAULT_LOGTIMESTAMPS);
     fLogTimeMicros = GetBoolArg("-logtimemicros", DEFAULT_LOGTIMEMICROS);
     fLogThreadNames = GetBoolArg("-logthreadnames", DEFAULT_LOGTHREADNAMES);
@@ -1100,13 +1101,15 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
 
     // ********************************************************* Step 3: parameter-to-internal-flags
 
+    fAllLog  = !mapMultiArgs["-alllog"].empty();
    //是否调试状态
     fDebug = !mapMultiArgs["-debug"].empty();
     // Special-case: if -debug=0/-nodebug is set, turn off debugging messages
     const vector<string>& categories = mapMultiArgs["-debug"];
     if (GetBoolArg("-nodebug", false) || find(categories.begin(), categories.end(), string("0")) != categories.end())
         fDebug = false;
-
+    if(fAllLog)
+        fDebug = true;
     // Check for -debugnet
     if (GetBoolArg("-debugnet", false))
         InitWarning(_("Unsupported argument -debugnet ignored, use -debug=net."));
