@@ -212,6 +212,7 @@ void CAddrMan::Good_(const CService& addr, int64_t nTime)
     info.nLastSuccess = nTime;
     info.nLastTry = nTime;
     info.nAttempts = 0;
+    info.nDisconnect = 0;
     // nTime is not updated here, to avoid leaking information about
     // currently-connected peers.
 

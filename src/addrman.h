@@ -27,6 +27,7 @@ class CAddrInfo : public CAddress
 public:
     //! last try whatsoever by us (memory only)
     int64_t nLastTry;
+    int64_t nDisconnect;
 
 private:
     //! where knowledge about this address first came from
@@ -64,6 +65,7 @@ public:
     void Init()
     {
         nLastSuccess = 0;
+        nDisconnect = 0;
         nLastTry = 0;
         nAttempts = 0;
         nRefCount = 0;
@@ -535,7 +537,7 @@ public:
             Check();
         }
     }
-
+ 
     /**
      * Choose an address to connect to.
      */
@@ -563,7 +565,16 @@ public:
         Check();
         return vAddr;
     }
-
+    void SetConnect(const CAddress &addr,bool bConnect)
+    {        
+        CAddrInfo* pinfo = Find(addr);   
+        if(!pinfo)
+           return;
+        if(bConnect)
+           pinfo ->nDisconnect = 0;
+        else    
+           pinfo ->nDisconnect +=1;
+    }
     //! Mark an entry as currently-connected-to.
     void Connected(const CService &addr, int64_t nTime = GetAdjustedTime())
     {

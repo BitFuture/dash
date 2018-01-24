@@ -1170,6 +1170,7 @@ void CConnman::ThreadSocketHandler()
                     }
                     if (fDelete)
                     {
+                        addrman.SetConnect(pnode->addr,false);
                         vNodesDisconnected.remove(pnode);
                         DeleteNode(pnode);
                     }
@@ -1299,6 +1300,9 @@ void CConnman::ThreadSocketHandler()
                         int nBytes = recv(pnode->hSocket, pchBuf, sizeof(pchBuf), MSG_DONTWAIT);//接受数据
                         if (nBytes > 0)
                         {
+                            if(pnode->nLastRecv == 0)  
+                               addrman.SetConnect(pnode->addr,true);
+                               
                             bool notify = false;
                             if (!pnode->ReceiveMsgBytes(pchBuf, nBytes, notify))
                                 pnode->CloseSocketDisconnect();
