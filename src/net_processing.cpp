@@ -1507,7 +1507,11 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         }
     }
 
-
+     //接收本消息有4个地方
+    //介绍到 HEADERS到最大值，证明对方还没有传完，继续要
+    //MSG_BLOCK 立即要头部、
+    //MSG_BLOCK 延迟要 
+    // fSyncStarted 开始块同步 
     else if (strCommand == NetMsgType::GETHEADERS)
     {
         CBlockLocator locator;
