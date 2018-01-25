@@ -99,7 +99,7 @@ namespace {
         CBlockIndex* pindex;     //!< Optional.
         bool fValidatedHeaders;  //!< Whether this block has validated headers at the time of request.
     };
-    map<uint256, pair<NodeId, list<QueuedBlock>::iterator> > mapBlocksInFlight;
+    map<uint256, pair<NodeId, list<QueuedBlock>::iterator> > mapBlocksInFlight;//已经发送过要数据，还没有接收到，接收到了旧清空
 
     /** Number of preferable block download peers. */
     int nPreferredDownload = 0;
@@ -142,9 +142,9 @@ struct CNodeState {
     //! List of asynchronously-determined block rejections to notify this peer about.
     std::vector<CBlockReject> rejects;//被拒绝的块，PeerLogicValidation::BlockChecked 收到块并检查后，会通知到所有连接，如果是拒绝的块会写入　rejects
     //! The best known block we know this peer has announced.
-    CBlockIndex *pindexBestKnownBlock;
+    CBlockIndex *pindexBestKnownBlock;//hashLastUnknownBlock对应的指针
     //! The hash of the last unknown block this peer has announced.
-    uint256 hashLastUnknownBlock;
+    uint256 hashLastUnknownBlock;//本连接最后需要广播的块
     //! The last full block we both have.
     CBlockIndex *pindexLastCommonBlock;
     //! The best header we have sent our peer.
@@ -314,6 +314,7 @@ void MarkBlockAsInFlight(NodeId nodeid, const uint256& hash, const Consensus::Pa
 }
 
 /** Check whether the last unknown block a peer advertised is not yet known. */
+//检查是否有需要广播的最后块
 void ProcessBlockAvailability(NodeId nodeid) {
     CNodeState *state = State(nodeid);
     assert(state != NULL);
@@ -327,7 +328,7 @@ void ProcessBlockAvailability(NodeId nodeid) {
         }
     }
 }
-
+//MSG_BLOCK MSG_HEADERS而来
 /** Update tracking information about which blocks a peer is assumed to have. */
 void UpdateBlockAvailability(NodeId nodeid, const uint256 &hash) {
     CNodeState *state = State(nodeid);
@@ -336,7 +337,7 @@ void UpdateBlockAvailability(NodeId nodeid, const uint256 &hash) {
     ProcessBlockAvailability(nodeid);
 
     BlockMap::iterator it = mapBlockIndex.find(hash);
-    if (it != mapBlockIndex.end() && it->second->nChainWork > 0) {
+    if (it != mapBlockIndex.end() && it->second->nChainWork > 0) {//块中有，直接赋值指针，否则等后面要发送的时候再找
         // An actually better block was announced.
         if (state->pindexBestKnownBlock == NULL || it->second->nChainWork >= state->pindexBestKnownBlock->nChainWork)
             state->pindexBestKnownBlock = it->second;
@@ -1384,11 +1385,11 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
 
             pfrom->AddInventoryKnown(inv);
 
-            bool fAlreadyHave = AlreadyHave(inv);
+            bool fAlreadyHave = AlreadyHave(inv);//该数据已经存在
             LogPrint("net", "got inv: %s  %s peer=%d\n", inv.ToString(), fAlreadyHave ? "have" : "new", pfrom->id);
 
-            if (inv.type == MSG_BLOCK) {
-                UpdateBlockAvailability(pfrom->GetId(), inv.hash);
+            if (inv.type == MSG_BLOCK) {//接收到块消息 
+                UpdateBlockAvailability(pfrom->GetId(), inv.hash);//注册本连接最后发送优质块头
                 if (!fAlreadyHave && !fImporting && !fReindex && !mapBlocksInFlight.count(inv.hash)) {
                     if (chainparams.DelayGetHeadersTime() != 0 && pindexBestHeader->GetBlockTime() < GetAdjustedTime() - chainparams.DelayGetHeadersTime()) {
                         // We are pretty far from being completely synced at the moment. If we would initiate a new
@@ -1397,8 +1398,10 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                         // if the peer we got this INV from may have a chain we don't know about yet, so we HAVE TO
                         // send a GETHEADERS message at some point in time. This is delayed to later in SendMessages
                         // when the headers chain has catched up enough.
+                        // 多个连接的时候，别总向一个连接要数据，等会，可能别的连接已经吧数据同步过来了
                         LogPrint("net", "delaying getheaders (%d) %s to peer=%d\n", pindexBestHeader->nHeight, inv.hash.ToString(), pfrom->id);
-                        pfrom->PushBlockHashFromINV(inv.hash);
+                        pfrom->PushBlockHashFromINV(inv.hash);//等待要数据
+                        //在sendmessage中根据时间重新发送 GETHEADERS
                     } else {
                         // First request the headers preceding the announced block. In the normal fully-synced
                         // case where a new block is announced that succeeds the current tip (no reorganization),
@@ -1408,14 +1411,15 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                         // time the block arrives, the header chain leading up to it is already validated. Not
                         // doing this will result in the received block being rejected as an orphan in case it is
                         // not a direct successor.
+                        //要数据
                         connman.PushMessage(pfrom, NetMsgType::GETHEADERS, chainActive.GetLocator(pindexBestHeader), inv.hash);
                         CNodeState *nodestate = State(pfrom->GetId());
-                        if (CanDirectFetch(chainparams.GetConsensus()) &&
+                        if (CanDirectFetch(chainparams.GetConsensus()) &&//直接要呢 tip 离当前时间太远了
                             nodestate->nBlocksInFlight < MAX_BLOCKS_IN_TRANSIT_PER_PEER) {
-                            vToFetch.push_back(inv);
+                            vToFetch.push_back(inv);//直接发 GETDATA
                             // Mark block as in flight already, even though the actual "getdata" message only goes out
                             // later (within the same cs_main lock, though).
-                            MarkBlockAsInFlight(pfrom->GetId(), inv.hash, chainparams.GetConsensus());
+                            MarkBlockAsInFlight(pfrom->GetId(), inv.hash, chainparams.GetConsensus());//发在等待列表中
                         }
                         LogPrint("net", "getheaders (%d) %s to peer=%d\n", pindexBestHeader->nHeight, inv.hash.ToString(), pfrom->id);
                     }
@@ -1430,7 +1434,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             }
 
             // Track requests for our stuff
-            GetMainSignals().Inventory(inv.hash);
+            GetMainSignals().Inventory(inv.hash);//通知钱包要数据
         }
 
         if (!vToFetch.empty())
@@ -2441,6 +2445,7 @@ bool SendMessages(CNode* pto, CConnman& connman, std::atomic<bool>& interruptMsg
         // Resend wallet transactions that haven't gotten in a block yet
         // Except during reindex, importing and IBD, when old wallet
         // transactions become unconfirmed and spams other nodes.
+        //隔断时间 广播 钱包信息
         if (!fReindex && !fImporting && !IsInitialBlockDownload())
         {
             GetMainSignals().Broadcast(nTimeBestReceived, &connman);
@@ -2459,25 +2464,30 @@ bool SendMessages(CNode* pto, CConnman& connman, std::atomic<bool>& interruptMsg
             // add all to the inv queue.
             LOCK(pto->cs_inventory);
             vector<CBlock> vHeaders;
+            // 接到 NetMsgType::SENDHEADERS  fPreferHeaders = true;
+            // vBlockHashesToAnnounce 接收到块的时候，需要广播
             bool fRevertToInv = (!state.fPreferHeaders || pto->vBlockHashesToAnnounce.size() > MAX_BLOCKS_TO_ANNOUNCE);
             CBlockIndex *pBestIndex = NULL; // last header queued for delivery
+            //查找这个连接中，最后一个需要广播的有效块头 
             ProcessBlockAvailability(pto->id); // ensure pindexBestKnownBlock is up-to-date
-
-            if (!fRevertToInv) {
+            //正常情况，只发最后一个块 
+            //在 SENDHEADERS 或者 vBlockHashesToAnnounce 过多的情况下，发送所有头部信息
+            if (!fRevertToInv) {//没有接收到 SENDHEADERS 找需要发送的队列，
                 bool fFoundStartingHeader = false;
                 // Try to find first header that our peer doesn't have, and
                 // then send all headers past that one.  If we come across any
                 // headers that aren't on chainActive, give up.
+                // 总体说，只要合法的，找到最后一个没有发送的，一直发送完
                 BOOST_FOREACH(const uint256 &hash, pto->vBlockHashesToAnnounce) {
                     BlockMap::iterator mi = mapBlockIndex.find(hash);
                     assert(mi != mapBlockIndex.end());
                     CBlockIndex *pindex = mi->second;
-                    if (chainActive[pindex->nHeight] != pindex) {
+                    if (chainActive[pindex->nHeight] != pindex) {//高度不匹配，退出并 发送
                         // Bail out if we reorged away from this block
                         fRevertToInv = true;
                         break;
                     }
-                    if (pBestIndex != NULL && pindex->pprev != pBestIndex) {
+                    if (pBestIndex != NULL && pindex->pprev != pBestIndex) {//需要发送的列表不连续，退出并发送
                         // This means that the list of blocks to announce don't
                         // connect to each other.
                         // This shouldn't really be possible to hit during
@@ -2496,9 +2506,9 @@ bool SendMessages(CNode* pto, CConnman& connman, std::atomic<bool>& interruptMsg
                     if (fFoundStartingHeader) {
                         // add this to the headers message
                         vHeaders.push_back(pindex->GetBlockHeader());
-                    } else if (PeerHasHeader(&state, pindex)) {
+                    } else if (PeerHasHeader(&state, pindex)) {//已经发送过了
                         continue; // keep looking for the first new block
-                    } else if (pindex->pprev == NULL || PeerHasHeader(&state, pindex->pprev)) {
+                    } else if (pindex->pprev == NULL || PeerHasHeader(&state, pindex->pprev)) {//第一个没有发送的
                         // Peer doesn't have this header but they do have the prior one.
                         // Start sending headers.
                         fFoundStartingHeader = true;
@@ -2511,12 +2521,12 @@ bool SendMessages(CNode* pto, CConnman& connman, std::atomic<bool>& interruptMsg
                     }
                 }
             }
-            if (fRevertToInv) {
+            if (fRevertToInv) {//发送头部数据
                 // If falling back to using an inv, just try to inv the tip.
                 // The last entry in vBlockHashesToAnnounce was our tip at some point
                 // in the past.
                 if (!pto->vBlockHashesToAnnounce.empty()) {
-                    const uint256 &hashToAnnounce = pto->vBlockHashesToAnnounce.back();
+                    const uint256 &hashToAnnounce = pto->vBlockHashesToAnnounce.back();//最后一个
                     BlockMap::iterator mi = mapBlockIndex.find(hashToAnnounce);
                     assert(mi != mapBlockIndex.end());
                     CBlockIndex *pindex = mi->second;
@@ -2532,7 +2542,7 @@ bool SendMessages(CNode* pto, CConnman& connman, std::atomic<bool>& interruptMsg
                     // If the peer announced this block to us, don't inv it back.
                     // (Since block announcements may not be via inv's, we can't solely rely on
                     // setInventoryKnown to track this.)
-                    if (!PeerHasHeader(&state, pindex)) {
+                    if (!PeerHasHeader(&state, pindex)) {//发送最后一个块
                         pto->PushInventory(CInv(MSG_BLOCK, hashToAnnounce));
                         LogPrint("net", "%s: sending inv peer=%d hash=%s\n", __func__,
                             pto->id, hashToAnnounce.ToString());
@@ -2548,8 +2558,9 @@ bool SendMessages(CNode* pto, CConnman& connman, std::atomic<bool>& interruptMsg
                     LogPrint("net", "%s: sending header %s to peer=%d\n", __func__,
                             vHeaders.front().GetHash().ToString(), pto->id);
                 }
+                //发送有效头部信息
                 connman.PushMessage(pto, NetMsgType::HEADERS, vHeaders);
-                state.pindexBestHeaderSent = pBestIndex;
+                state.pindexBestHeaderSent = pBestIndex;//最后发送的
             }
             pto->vBlockHashesToAnnounce.clear();
         }
