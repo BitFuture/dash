@@ -199,7 +199,34 @@ UniValue genchainparams(const UniValue& params, bool fHelp)
     GetMainSignals().ScriptForMining(coinbaseScript);
     CScript& scriptPubKeyIn = coinbaseScript->reserveScript;
     std::string sKey = HexStr(scriptPubKeyIn.begin()+1,scriptPubKeyIn.end()-1);   
-    vector<unsigned char>  s3 = ParseHex(sKey);
+    LogPrintf("Public Key %s\n",sKey);
+    int iCheckPoint = 21;
+    int64_t iTx = 0;
+    CCheckpointData checkpoint = Params().Checkpoints();
+    CBlockIndex *pTip = chainActive.Tip();
+    if(pTip->nHeight < iCheckPoint  *2)
+       return 1;
+    int64_t   nTime = pTip->nTime;
+    LogPrintf("CheckPoint %lld %s\n",pTip->nHeight,pTip->GetBlockHash().ToString());
+    while(pTip && pTip ->GetBlockHash() !=  Params().GetConsensus().hashGenesisBlock)
+    {
+        if(pTip->nHeight % iCheckPoint == 0)
+        {
+             LogPrintf("CheckPoint %lld %s\n",pTip->nHeight,pTip->GetBlockHash().ToString());
+        }
+        CBlock block;
+        if(!ReadBlockFromDisk(block, pTip, Params().GetConsensus())) 
+        {
+            pTip = pTip ->pprev;
+            continue;
+        }
+        else 
+           iTx += block.vtx.size();
+        pTip = pTip ->pprev;
+    }
+     LogPrintf("LastTime %lld\n",nTime);
+     LogPrintf("Total Tx %lld\n",iTx);
+
    return 1; 
 }
 
