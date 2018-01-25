@@ -1316,6 +1316,8 @@ bool IsInitialBlockDownload()
         return true;
     if (chainActive.Tip()->GetBlockTime() < (GetTime() - chainParams.MaxTipAge())) //时间不合法 小于2小时
         return true;
+    if(!CheckLastCheckpoint(chainActive.Tip(),chainParams))
+        return true;
     lockIBDState = true;
     return false;
 }
@@ -3225,6 +3227,26 @@ bool CheckBlock(const CBlock& block, CValidationState& state, bool fCheckPOW, bo
     return true;
 }
 
+
+bool  CheckLastCheckpoint(const CBlockIndex* pindex,const CChainParams& chainparams )    {
+    const CCheckpointData& data =chainparams.Checkpoints();
+    const MapCheckpoints& checkpoints = data.mapCheckpoints;
+    BOOST_REVERSE_FOREACH(const MapCheckpoints::value_type& i, checkpoints)//从检查点中找区块的相同hash 
+    {   
+        bool bfind = false;
+        const uint256& hCheckHash = i.second;   
+        while(pindex){
+            if(pindex ->GetBlockHash() == hCheckHash ){
+             bfind = true;
+             break;
+            }
+            pindex = pindex ->pprev;
+         }
+         if(!bfind)
+           return 0;
+     }
+    return 1;
+}
 static bool CheckIndexAgainstCheckpoint(const CBlockIndex* pindexPrev, CValidationState& state, const CChainParams& chainparams, const uint256& hash)
 {
     if (*pindexPrev->phashBlock == chainparams.GetConsensus().hashGenesisBlock) //前一区块为创世区块

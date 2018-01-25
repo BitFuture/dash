@@ -285,10 +285,12 @@ public:
         consensus.vDeployments[Consensus::DEPLOYMENT_DIP0001].nThreshold = 3226; // 80% of 4032
 
         // The best chain should have at least this much work.
+        //genchainparams 会写日志，修改这个值，用以确认 chian 是否合法
         consensus.nMinimumChainWork = uint256S("0000000000000000000000000000000000000000000000000000000013f013f0"); // 782700
 
         // By default assume that the signatures in ancestors of this block are valid.
-        consensus.defaultAssumeValid = uint256S("0x000000000000001c172f518793c3b9e83f202284615592f87fe3506ce964dcd4"); // 782700
+        //检查合法性的时候，这个之前的就不用检查了
+        consensus.defaultAssumeValid = uint256S("000005291547416622dc50b4c1019de62c96d597c7a67c56d0b8d1e9f3934b14"); // 782700
 
         /**
          * The message start string is designed to be unlikely to occur in normal data.
@@ -371,7 +373,8 @@ public:
         strSporkPubKey = "04549ac134f694c0243f503e8c8a9a986f5de6610049c40b07816809b0d1d06a21b07be27b9bb555931773f62ba6cf35a25fd52f694d4e1106ccd237a7bb899fdd";
 
         strDataDir = ".dashcoreeric";// swx
- 
+        //genchainparams 会写日志，修改这个列表 
+        //CheckLastCheckpoint 会用这个表检查bestchain是否合法
         checkpointData = (CCheckpointData) {
             boost::assign::map_list_of
             (0,   uint256S("00000c8b0036cadbcbb62f4257c10f16c9aaca09820fe0f79ef2544f567fd8b9"))

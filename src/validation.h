@@ -491,6 +491,7 @@ int32_t ComputeBlockVersion(const CBlockIndex* pindexPrev, const Consensus::Para
  */
 bool GetBlockHash(uint256& hashRet, int nBlockHeight = -1);
 
+bool  CheckLastCheckpoint(const CBlockIndex* pindex,const CChainParams& chainparams );
 /** Reject codes greater or equal to this can be returned by AcceptToMemPool
  * for transactions, to signal internal conditions. They cannot and should not
  * be sent over the P2P network.

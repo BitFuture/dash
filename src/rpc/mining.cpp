@@ -200,33 +200,35 @@ UniValue genchainparams(const UniValue& params, bool fHelp)
     CScript& scriptPubKeyIn = coinbaseScript->reserveScript;
     std::string sKey = HexStr(scriptPubKeyIn.begin()+1,scriptPubKeyIn.end()-1);   
     LogPrintf("Public Key %s\n",sKey);
-    int iCheckPoint = 20;
-    int64_t iTx = 0;
-    CCheckpointData checkpoint = Params().Checkpoints();
+    int     iCheckPoint = 21;
+    int64_t iTx     = 0;
+    bool    bfirst  = false;    
     CBlockIndex *pTip = chainActive.Tip();
     if(pTip->nHeight < iCheckPoint  *2)
-       return 1;
-    int64_t   nTime = pTip->nTime;    
-     std::vector<CBlockIndex*> vChain1;
-    LogPrintf("Chain Word %s\n",pTip->nChainWork.GetHex());
-   
+       return 1;     
+    std::vector<CBlockIndex*> vChain1;   
     while(pTip)
     {
         if(pTip->nHeight % iCheckPoint == 0)
         {
-            vChain1.push_back(pTip);           
-        }        
-        iTx += pTip->nTx;
+            vChain1.push_back(pTip);   
+            bfirst = true;        
+        }       
+        if(bfirst)
+            iTx += pTip->nTx;
         pTip = pTip ->pprev;
-    }
-    vChain1.push_back(chainActive.Tip());
-    for(int i=vChain1.size() -1;i>=0;i--)
+    }     
+    if(vChain1.size()<(size_t)iCheckPoint)
+      return 1;
+    for(int64_t i=vChain1.size() -1;i >=0;i--)
     {
         pTip = vChain1[i];
         LogPrintf("(%lld, uint256S(\"%s\"))\n",pTip->nHeight,pTip->GetBlockHash().ToString());
     }
-     LogPrintf("LastTime %lld\n",nTime);
-     LogPrintf("Total Tx %lld\n",iTx);
+    pTip = vChain1[0];
+    LogPrintf("Chain Work %s\n",pTip->nChainWork.GetHex());
+    LogPrintf("LastTime %lld\n",pTip->nTime);
+    LogPrintf("Total Tx %lld\n",iTx);
 
      vChain1.clear();
 

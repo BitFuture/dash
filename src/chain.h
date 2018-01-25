@@ -466,6 +466,8 @@ public:
 
     /** Find the last common block between this chain and a block index entry. */
     const CBlockIndex *FindFork(const CBlockIndex *pindex) const;
+
+  
 };
 
 #endif // BITCOIN_CHAIN_H
