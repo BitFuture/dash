@@ -1289,6 +1289,8 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
     }
 
     //SendMessages 每个连接　隔段时间会广播　NetMsgType::ADDR　连接中　　addrKnown　记录已经广播过的地址，不会重复广播
+    //广播的列表对方 VERSION 会发送 NetMsgType::GETADDR 这个来准备，后面添加的也会加景来
+    //PushAddress 有几个地方，可以查对方发送addr的来源
     else if (strCommand == NetMsgType::ADDR)
     {
         vector<CAddress> vAddr;
@@ -1298,6 +1300,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         //　地址超过１０００个不接收了
         if (pfrom->nVersion < CADDR_TIME_VERSION && connman.GetAddressCount() > 1000)
             return true;
+        //发送超过1000个，认为是攻击节点，因为对方发送的时候，做了1000个限制
         if (vAddr.size() > 1000)
         {
             LOCK(cs_main);
@@ -1313,15 +1316,16 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         {
             if (interruptMsgProc)
                 return true;
-
+            //不是需要的网络类型
             if ((addr.nServices & REQUIRED_SERVICES) != REQUIRED_SERVICES)
                 continue;
 
             if (addr.nTime <= 100000000 || addr.nTime > nNow + 10 * 60)
                 addr.nTime = nNow - 5 * 24 * 60 * 60;
+            //这个连接接受到的，不在广播回去    
             pfrom->AddAddressKnown(addr);
             bool fReachable = IsReachable(addr);
-            if (addr.nTime > nSince && !pfrom->fGetAddr && vAddr.size() <= 10 && addr.IsRoutable())
+            if (addr.nTime > nSince && !pfrom->fGetAddr && vAddr.size() <= 10 && addr.IsRoutable())//中继节点地址
             {
                 RelayAddress(addr, fReachable, connman);
             }
@@ -1329,10 +1333,11 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             if (fReachable)
                 vAddrOk.push_back(addr);
         }
+        //添加到轮询地址列表
         connman.AddNewAddresses(vAddrOk, pfrom->addr, 2 * 60 * 60);
-        if (vAddr.size() < 1000)
+        if (vAddr.size() < 1000)//接收小于1000
             pfrom->fGetAddr = false;
-        if (pfrom->fOneShot)
+        if (pfrom->fOneShot)//一次性连接，关闭连接
             pfrom->fDisconnect = true;
     }
 
@@ -1913,7 +1918,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             pfrom->nLastBlockTime = GetTime();
     }
 
-
+    //对方是一次性连接或者地址总数小于1000，在VERSION中要地址
     else if (strCommand == NetMsgType::GETADDR)
     {
         // This asymmetric behavior for inbound and outbound connections was introduced
