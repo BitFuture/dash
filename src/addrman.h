@@ -19,35 +19,35 @@
 
 /**
  * Extended statistics about a CAddress
- */
+ *///CAddress：CService:CNetAddr
 class CAddrInfo : public CAddress
 {
 
 
 public:
     //! last try whatsoever by us (memory only)
-    int64_t nLastTry;
-    int64_t nDisconnect;
-    int64_t nConnectSelf;
+    int64_t nLastTry;  //最后一次尝试连接的时间
+    int64_t nDisconnect;//关闭连接的次数
+    int64_t nConnectSelf;//自己连接自己的次数
 
 private:
     //! where knowledge about this address first came from
-    CNetAddr source;
+    CNetAddr source;//广播添加的时候，接受到广播的连接地址，也就是说这个地址谁广播过来的
 
     //! last successful connection by us
-    int64_t nLastSuccess;
+    int64_t nLastSuccess;//最后 good的时间
 
     //! connection attempts since last successful attempt
-    int nAttempts;
+    int nAttempts;//尝试连接的次数，对下次选取尝试的权重有用
 
     //! reference count in new sets (memory only)
-    int nRefCount;
+    int nRefCount;//引用计数
 
     //! in tried set? (memory only)
-    bool fInTried;
+    bool fInTried;//可以重新连接标志，避免频繁的从 new 移动到 tried
 
     //! position in vRandom
-    int nRandomPos;
+    int nRandomPos;//在随机列表中的位置
 
     friend class CAddrMan;
 
@@ -101,6 +101,7 @@ public:
     int GetBucketPosition(const uint256 &nKey, bool fNew, int nBucket) const;
 
     //! Determine whether the statistics about this entry are bad enough so that it can just be deleted
+    // 劣质的链接，将删除
     bool IsTerrible(int64_t nNow = GetAdjustedTime()) const;
 
     //! Calculate the relative chance this entry should be given when selecting nodes to connect to
@@ -180,27 +181,30 @@ private:
     mutable CCriticalSection cs;
 
     //! last used nId
-    int nIdCount;
+    int nIdCount;//最后的id,新建的时候要 +1 
 
     //! table with information about all nIds
+    //地址对真实信息的索引
     std::map<int, CAddrInfo> mapInfo;
 
     //! find an nId based on its network address
+    //IP 和地址的索引
     std::map<CNetAddr, int> mapAddr;
 
     //! randomly-ordered vector of all nIds
+    //id的随机顺序
     std::vector<int> vRandom;
 
     // number of "tried" entries
-    int nTried;
+    int nTried;//可以重新连接的数字
 
-    //! list of "tried" buckets
+    //! list of "tried" buckets 尝试池子
     int vvTried[ADDRMAN_TRIED_BUCKET_COUNT][ADDRMAN_BUCKET_SIZE];
 
     //! number of (unique) "new" entries
-    int nNew;
+    int nNew;//新地址的个数
 
-    //! list of "new" buckets
+    //! list of "new" buckets //新池子
     int vvNew[ADDRMAN_NEW_BUCKET_COUNT][ADDRMAN_BUCKET_SIZE];
 
 protected:
@@ -543,6 +547,7 @@ public:
     /**
      * Choose an address to connect to.
      */
+    //选取一个地址
     CAddrInfo Select(bool newOnly = false)
     {
         CAddrInfo addrRet;
@@ -556,6 +561,7 @@ public:
     }
 
     //! Return a bunch of addresses, selected at random.
+    // 把 vRandom 的值按随机顺序取出来，去掉危害比较高的
     std::vector<CAddress> GetAddr()
     {
         Check();
@@ -567,6 +573,7 @@ public:
         Check();
         return vAddr;
     }
+    //设置失败连接次数，一旦连接成功 清零
     void SetConnect(const CAddress &addr,bool bConnect)
     {        
         CAddrInfo* pinfo = Find(addr);   
@@ -577,6 +584,7 @@ public:
         else    
            pinfo ->nDisconnect +=1;
     }
+    //设置自己连接自己标志，
     void SetConnectSelf(const CAddress &addr)
     {        
         CAddrInfo* pinfo = Find(addr);   
@@ -585,6 +593,7 @@ public:
         pinfo ->nConnectSelf +=1;
     }
     //! Mark an entry as currently-connected-to.
+    // 当某个连接删除时候，如果成功连接过，就更新一下连接时间，20*60 范围内刷新
     void Connected(const CService &addr, int64_t nTime = GetAdjustedTime())
     {
         {
@@ -594,7 +603,7 @@ public:
             Check();
         }
     }
-
+    //设置网络服务类型
     void SetServices(const CService &addr, ServiceFlags nServices)
     {
         LOCK(cs);

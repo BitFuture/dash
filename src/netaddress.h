@@ -27,6 +27,7 @@ enum Network
 };
 
 /** IP address (IPv6, or IPv4 using mapped IPv6 range (::FFFF:0:0/96)) */
+//地址定义
 class CNetAddr
 {
     protected:

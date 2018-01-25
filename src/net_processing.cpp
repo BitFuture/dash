@@ -1288,13 +1288,14 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         pfrom->fSuccessfullyConnected = true;
     }
 
-
+    //SendMessages 每个连接　隔段时间会广播　NetMsgType::ADDR　连接中　　addrKnown　记录已经广播过的地址，不会重复广播
     else if (strCommand == NetMsgType::ADDR)
     {
         vector<CAddress> vAddr;
         vRecv >> vAddr;
 
         // Don't want addr from older versions unless seeding
+        //　地址超过１０００个不接收了
         if (pfrom->nVersion < CADDR_TIME_VERSION && connman.GetAddressCount() > 1000)
             return true;
         if (vAddr.size() > 1000)

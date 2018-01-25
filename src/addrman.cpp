@@ -73,6 +73,8 @@ double CAddrInfo::GetChance(int64_t nNow) const
 
 CAddrInfo* CAddrMan::Find(const CNetAddr& addr, int* pnId)
 {
+    if (pnId)
+      *pnId = -1;
     std::map<CNetAddr, int>::iterator it = mapAddr.find(addr);
     if (it == mapAddr.end())
         return NULL;
@@ -144,7 +146,7 @@ void CAddrMan::ClearNew(int nUBucket, int nUBucketPos)
         }
     }
 }
-
+//当某个地址确认连接成功后，从 新 池子移动到 try 池子
 void CAddrMan::MakeTried(CAddrInfo& info, int nId)
 {
     // remove the entry from all new buckets
@@ -164,6 +166,7 @@ void CAddrMan::MakeTried(CAddrInfo& info, int nId)
     int nKBucketPos = info.GetBucketPosition(nKey, false, nKBucket);
 
     // first make space to add it (the existing tried entry there is moved to new, deleting whatever is there).
+    //干掉一个，把他当做新的去玩
     if (vvTried[nKBucket][nKBucketPos] != -1) {
         // find an item to evict
         int nIdEvict = vvTried[nKBucket][nKBucketPos];
@@ -186,13 +189,14 @@ void CAddrMan::MakeTried(CAddrInfo& info, int nId)
         vvNew[nUBucket][nUBucketPos] = nIdEvict;
         nNew++;
     }
+    //把他放到旧的中间去玩
     assert(vvTried[nKBucket][nKBucketPos] == -1);
 
     vvTried[nKBucket][nKBucketPos] = nId;
     nTried++;
     info.fInTried = true;
 }
-
+//某个地址合法连接了，要移动到旧的去，移动过程中，旧的也可能长期没用，旧移动到新的去
 void CAddrMan::Good_(const CService& addr, int64_t nTime)
 {
     int nId;
@@ -213,6 +217,8 @@ void CAddrMan::Good_(const CService& addr, int64_t nTime)
     info.nLastTry = nTime;
     info.nAttempts = 0;
     info.nDisconnect = 0;
+    info.nConnectSelf = 0;
+     
     // nTime is not updated here, to avoid leaking information about
     // currently-connected peers.
 
@@ -242,17 +248,20 @@ void CAddrMan::Good_(const CService& addr, int64_t nTime)
     // move nId to the tried tables
     MakeTried(info, nId);
 }
-
+//添加新地址
+////Masternode Broadcast 
+//ThreadDNSAddressSeed DNS 转化而来
+//strCommand == NetMsgType::ADDR 广播地址而来
+//根据某种原理，会删除没用的东西
 bool CAddrMan::Add_(const CAddress& addr, const CNetAddr& source, int64_t nTimePenalty)
 {
     if (!addr.IsRoutable())
         return false;
-
     bool fNew = false;
-    int nId;
+    int nId=-1;
     CAddrInfo* pinfo = Find(addr, &nId);
-
-    if (pinfo) {
+    //已经存在
+    if (pinfo) {//更新数据
         // periodically update nTime
         bool fCurrentlyOnline = (GetAdjustedTime() - addr.nTime < 24 * 60 * 60);
         int64_t nUpdateInterval = (fCurrentlyOnline ? 60 * 60 : 24 * 60 * 60);
@@ -267,12 +276,12 @@ bool CAddrMan::Add_(const CAddress& addr, const CNetAddr& source, int64_t nTimeP
             return false;
 
         // do not update if the entry was already in the "tried" table
-        if (pinfo->fInTried)
+        if (pinfo->fInTried)//已经在旧的列表中
             return false;
 
         // do not update if the max reference count is reached
         if (pinfo->nRefCount == ADDRMAN_NEW_BUCKETS_PER_ADDRESS)
-            return false;
+            return false;//应用计数太大了
 
         // stochastic test: previous nRefCount == N: 2^N times harder to increase it
         int nFactor = 1;
@@ -280,37 +289,37 @@ bool CAddrMan::Add_(const CAddress& addr, const CNetAddr& source, int64_t nTimeP
             nFactor *= 2;
         if (nFactor > 1 && (RandomInt(nFactor) != 0))
             return false;
-    } else {
-        pinfo = Create(addr, source, &nId);
+    } else {//不存在
+        pinfo = Create(addr, source, &nId);//有新的 id 
         pinfo->nTime = std::max((int64_t)0, (int64_t)pinfo->nTime - nTimePenalty);
-        nNew++;
+        nNew++;//新计数加1
         fNew = true;
     }
 
     int nUBucket = pinfo->GetNewBucket(nKey, source);
     int nUBucketPos = pinfo->GetBucketPosition(nKey, true, nUBucket);
-    if (vvNew[nUBucket][nUBucketPos] != nId) {
-        bool fInsert = vvNew[nUBucket][nUBucketPos] == -1;
-        if (!fInsert) {
+    if (vvNew[nUBucket][nUBucketPos] != nId) {//水桶中不是自己
+        bool fInsert = vvNew[nUBucket][nUBucketPos] == -1;//原来就没有
+        if (!fInsert) {//原来有
             CAddrInfo& infoExisting = mapInfo[vvNew[nUBucket][nUBucketPos]];
             if (infoExisting.IsTerrible() || (infoExisting.nRefCount > 1 && pinfo->nRefCount == 0)) {
                 // Overwrite the existing new table entry.
-                fInsert = true;
+                fInsert = true;//原来没有，要干掉了
             }
         }
-        if (fInsert) {
-            ClearNew(nUBucket, nUBucketPos);
+        if (fInsert) {//原来就没有
+            ClearNew(nUBucket, nUBucketPos);//如果有，就删除
             pinfo->nRefCount++;
             vvNew[nUBucket][nUBucketPos] = nId;
-        } else {
-            if (pinfo->nRefCount == 0) {
+        } else {//水桶中已经有了
+            if (pinfo->nRefCount == 0) {//如果没有人用自己，就删除
                 Delete(nId);
             }
         }
     }
     return fNew;
 }
-
+//尝试过，设置尝试时间和尝试次数，在选择 Select_的时候，会用到 nAttempts 作为权重，尝试越多，机会越少
 void CAddrMan::Attempt_(const CService& addr, int64_t nTime)
 {
     CAddrInfo* pinfo = Find(addr);
@@ -329,7 +338,7 @@ void CAddrMan::Attempt_(const CService& addr, int64_t nTime)
     info.nLastTry = nTime;
     info.nAttempts++;
 }
-
+//ThreadOpenConnections　中会定期　按照某中规则　选取地址尝试连接　，newOnly　定时执行，
 CAddrInfo CAddrMan::Select_(bool newOnly)
 {
     if (size() == 0)
@@ -339,11 +348,11 @@ CAddrInfo CAddrMan::Select_(bool newOnly)
         return CAddrInfo();
 
     // Use a 50% chance for choosing between tried and new table entries.
-    if (!newOnly &&
-       (nTried > 0 && (nNew == 0 || RandomInt(2) == 0))) { 
+    // 旧的标志，旧的计数大于　０　没有新的或者　50% 比例用旧的
+    if (!newOnly && (nTried > 0 && (nNew == 0 || RandomInt(2) == 0))) { 
         // use a tried node
         double fChanceFactor = 1.0;
-        while (1) {
+        while (1) {//随机找个旧的
             int nKBucket = RandomInt(ADDRMAN_TRIED_BUCKET_COUNT);
             int nKBucketPos = RandomInt(ADDRMAN_BUCKET_SIZE);
             while (vvTried[nKBucket][nKBucketPos] == -1) {
@@ -352,12 +361,12 @@ CAddrInfo CAddrMan::Select_(bool newOnly)
             }
             int nId = vvTried[nKBucket][nKBucketPos];
             assert(mapInfo.count(nId) == 1);
-            CAddrInfo& info = mapInfo[nId];
-            if (RandomInt(1 << 30) < fChanceFactor * info.GetChance() * (1 << 30))
+            CAddrInfo& info = mapInfo[nId];//根据id找到信息
+            if (RandomInt(1 << 30) < fChanceFactor * info.GetChance() * (1 << 30))//不懂
                 return info;
             fChanceFactor *= 1.2;
         }
-    } else {
+    } else {//找个新的，不明白为啥搞这么复杂
         // use a new node
         double fChanceFactor = 1.0;
         while (1) {
@@ -378,21 +387,22 @@ CAddrInfo CAddrMan::Select_(bool newOnly)
 }
 
 #ifdef DEBUG_ADDRMAN
+//调试状态，检查数据合法行
 int CAddrMan::Check_()
 {
     std::set<int> setTried;
     std::map<int, int> mapNew;
 
-    if (vRandom.size() != nTried + nNew)
+    if (vRandom.size() != nTried + nNew) //使用总数必须等于 新和旧的总数
         return -7;
 
     for (std::map<int, CAddrInfo>::iterator it = mapInfo.begin(); it != mapInfo.end(); it++) {
         int n = (*it).first;
         CAddrInfo& info = (*it).second;
-        if (info.fInTried) {
-            if (!info.nLastSuccess)
+        if (info.fInTried) {//旧的 
+            if (!info.nLastSuccess) //必须成功过
                 return -1;
-            if (info.nRefCount)
+            if (info.nRefCount)//必没有人用
                 return -2;
             setTried.insert(n);
         } else {
@@ -454,7 +464,7 @@ int CAddrMan::Check_()
     return 0;
 }
 #endif
-
+//把 vRandom 的值按随机顺序取出来，去掉危害比较高的
 void CAddrMan::GetAddr_(std::vector<CAddress>& vAddr)
 {
     unsigned int nNodes = ADDRMAN_GETADDR_MAX_PCT * vRandom.size() / 100;
@@ -462,6 +472,7 @@ void CAddrMan::GetAddr_(std::vector<CAddress>& vAddr)
         nNodes = ADDRMAN_GETADDR_MAX;
 
     // gather a list of random nodes, skipping those of low quality
+    // 这个取地址的方式很奇特，把 vRandom 的值按随机顺序取出来，去掉危害比较高的
     for (unsigned int n = 0; n < vRandom.size(); n++) {
         if (vAddr.size() >= nNodes)
             break;
@@ -475,7 +486,7 @@ void CAddrMan::GetAddr_(std::vector<CAddress>& vAddr)
             vAddr.push_back(ai);
     }
 }
-
+//更新连接时间
 void CAddrMan::Connected_(const CService& addr, int64_t nTime)
 {
     CAddrInfo* pinfo = Find(addr);
@@ -495,7 +506,7 @@ void CAddrMan::Connected_(const CService& addr, int64_t nTime)
     if (nTime - info.nTime > nUpdateInterval)
         info.nTime = nTime;
 }
-
+//设置服务类型
 void CAddrMan::SetServices_(const CService& addr, ServiceFlags nServices)
 {
     CAddrInfo* pinfo = Find(addr);
@@ -513,7 +524,7 @@ void CAddrMan::SetServices_(const CService& addr, ServiceFlags nServices)
     // update info
     info.nServices = nServices;
 }
-
+//取随机值
 int CAddrMan::RandomInt(int nMax){
     return GetRandInt(nMax);
 }
