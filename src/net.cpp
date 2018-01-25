@@ -1735,6 +1735,8 @@ void CConnman::ThreadOpenConnections()
         {
             CAddrInfo addr = addrman.Select(fFeeler);
           
+            if(addr.nConnectSelf >5)
+                   break;
             // if we selected an invalid address, restart
             if (!addr.IsValid() || setConnected.count(addr.GetGroup()) || IsLocal(addr))
                 break;
