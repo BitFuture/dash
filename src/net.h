@@ -702,7 +702,7 @@ public:
     bool fClient;     //非NETWORK连接类型
     bool fInbound;    //主动连接别人的时候　false 被别人连接 true 本地为　false　　 
     bool fNetworkNode;//主动连接别人的时候　 true 被别人连接的时候　　false　本地都为　false　　
-    std::atomic_bool fSuccessfullyConnected;
+    std::atomic_bool fSuccessfullyConnected;//连接成功 VERACK 中赋值
     bool fDisconnect;
     // We use fRelayTxes for two purposes -
     // a) it allows us to not relay tx invs before receiving the peer's version message

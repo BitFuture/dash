@@ -87,7 +87,7 @@ protected:
     CChainParams() {}
 
     Consensus::Params consensus;
-    CMessageHeader::MessageStartChars pchMessageStart;
+    CMessageHeader::MessageStartChars pchMessageStart; //所有消息的头部标记
     //! Raw pub key bytes for the broadcast alert signing key.
     std::vector<unsigned char> vAlertPubKey;
     int nDefaultPort;

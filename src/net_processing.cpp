@@ -54,8 +54,8 @@ struct COrphanTx {
     CTransaction tx;
     NodeId fromPeer;
 };
-map<uint256, COrphanTx> mapOrphanTransactions GUARDED_BY(cs_main);
-map<uint256, set<uint256> > mapOrphanTransactionsByPrev GUARDED_BY(cs_main);;
+map<uint256, COrphanTx> mapOrphanTransactions GUARDED_BY(cs_main); //接收到的孤儿交易，
+map<uint256, set<uint256> > mapOrphanTransactionsByPrev GUARDED_BY(cs_main);;//孤儿交易的前一交易，当接收到的时候，处理孤儿交易
 void EraseOrphansFor(NodeId peer) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
 // Internal stuff
@@ -68,7 +68,7 @@ namespace {
      * messages or ban them when processing happens afterwards. Protected by
      * cs_main.
      */
-    map<uint256, NodeId> mapBlockSource;
+    map<uint256, NodeId> mapBlockSource; //正在接收的块
 
     /**
      * Filter for transactions that were recently rejected by
@@ -106,7 +106,7 @@ namespace {
 
 
     /** Number of peers from which we're downloading blocks. */
-    int nPeersWithValidatedDownloads = 0;
+    int nPeersWithValidatedDownloads = 0; //总的正在同步数据的连接的个数
 } // anon namespace
 
 //////////////////////////////////////////////////////////////////////////////
@@ -116,7 +116,7 @@ namespace {
 
 namespace {
 
-struct CBlockReject {
+struct CBlockReject {//拒绝的数据结构
     unsigned char chRejectCode;
     string strRejectReason;
     uint256 hashBlock;
@@ -130,9 +130,9 @@ struct CBlockReject {
  */
 struct CNodeState {
     //! The peer's address
-    const CService address;
+    const CService address;//连接地址
     //! Whether we have a fully established connection.
-    bool fCurrentlyConnected;
+    bool fCurrentlyConnected;//VERACK 中赋值，刚刚连接
     //! Accumulated misbehaviour score for this peer.
     int nMisbehavior;//阻止计数，当到达某个阈值，fShouldBan = TRUE
     //! Whether this peer should be disconnected and banned (unless whitelisted).
@@ -157,13 +157,13 @@ struct CNodeState {
     int64_t nStallingSince;
     list<QueuedBlock> vBlocksInFlight;
     //! When the first entry in vBlocksInFlight started downloading. Don't care when vBlocksInFlight is empty.
-    int64_t nDownloadingSince;
+    int64_t nDownloadingSince;//开始下载时间
     int nBlocksInFlight;
     int nBlocksInFlightValidHeaders;
     //! Whether we consider this a preferred download peer.
-    bool fPreferredDownload;
+    bool fPreferredDownload;//是不是开始同步块，在 VERSION中调用 UpdatePreferredDownload 判断，在sendmessage中开始同步
     //! Whether this peer wants invs or headers (when possible) for block announcements.
-    bool fPreferHeaders;
+    bool fPreferHeaders;//是否发送headers SENDHEADERS 赋值，sendmessage中发送头部信息
 
     CNodeState(CAddress addrIn, std::string addrNameIn) : address(addrIn), name(addrNameIn) {
         fCurrentlyConnected = false;
@@ -185,7 +185,7 @@ struct CNodeState {
 };
 
 /** Map maintaining per-node state. Requires cs_main. */
-map<NodeId, CNodeState> mapNodeState;
+map<NodeId, CNodeState> mapNodeState;//连接状态列表，不明白为啥单独出来，直接放node中不可以吗 ？
 
 // Requires cs_main.
 CNodeState *State(NodeId pnode) {
@@ -194,7 +194,7 @@ CNodeState *State(NodeId pnode) {
         return NULL;
     return &it->second;
 }
-
+//VERSION 中调用，判断这个节点是不是首选下载
 void UpdatePreferredDownload(CNode* node, CNodeState* state)
 {
     nPreferredDownload -= state->fPreferredDownload;
@@ -203,19 +203,20 @@ void UpdatePreferredDownload(CNode* node, CNodeState* state)
     state->fPreferredDownload = (!node->fInbound || node->fWhitelisted) && !node->fOneShot && !node->fClient;
 
     nPreferredDownload += state->fPreferredDownload;
-}
-
+} 
+//发送连接的 VERSION 信息
+//自己主动连接对方，或者对方 VERSION中应答对方
 void PushNodeVersion(CNode *pnode, CConnman& connman, int64_t nTime)
 {
     ServiceFlags nLocalNodeServices = pnode->GetLocalServices();
-    uint64_t nonce = pnode->GetLocalNonce();
-    int nNodeStartingHeight = pnode->GetMyStartingHeight();
+    uint64_t nonce = pnode->GetLocalNonce();//随机值，便于比较是不是自己连接自己
+    int nNodeStartingHeight = pnode->GetMyStartingHeight();//自己的 区块高度
     NodeId nodeid = pnode->GetId();
     CAddress addr = pnode->addr;
-
+    //对方ip
     CAddress addrYou = (addr.IsRoutable() && !IsProxy(addr) ? addr : CAddress(CService(), addr.nServices));
     CAddress addrMe = CAddress(CService(), nLocalNodeServices);
-
+    //fRelayTxes 是不是接收交易信息，某种情况只接收块信息
     connman.PushMessageWithVersion(pnode, INIT_PROTO_VERSION, NetMsgType::VERSION, PROTOCOL_VERSION, (uint64_t)nLocalNodeServices, nTime, addrYou, addrMe,
             nonce, strSubVersion, nNodeStartingHeight, ::fRelayTxes);
 
@@ -224,7 +225,7 @@ void PushNodeVersion(CNode *pnode, CConnman& connman, int64_t nTime)
     else
         LogPrint("net", "send version message: version %d, blocks=%d, us=%s, peer=%d\n", PROTOCOL_VERSION, nNodeStartingHeight, addrMe.ToString(), nodeid);
 }
-
+//初始化连接
 void InitializeNode(CNode *pnode, CConnman& connman) {
     CAddress addr = pnode->addr;
     std::string addrName = pnode->addrName;
@@ -236,22 +237,23 @@ void InitializeNode(CNode *pnode, CConnman& connman) {
     if(!pnode->fInbound)//自己连接对方，发送VERSION ,对方也会反馈 VERSION
         PushNodeVersion(pnode, connman, GetTime());
 }
-
+//关闭连接
 void FinalizeNode(NodeId nodeid, bool& fUpdateConnectionTime) {
     fUpdateConnectionTime = false;
     LOCK(cs_main);
     CNodeState *state = State(nodeid);
 
-    if (state->fSyncStarted)
+    if (state->fSyncStarted)//已经开始同步，同步计数减一，为下一个连接能够启动同步
         nSyncStarted--;
 
     if (state->nMisbehavior == 0 && state->fCurrentlyConnected) {
-        fUpdateConnectionTime = true;
+        fUpdateConnectionTime = true;//是否更新关闭连接时间
     }
-
+    //清空总记录中正在同步的记录
     BOOST_FOREACH(const QueuedBlock& entry, state->vBlocksInFlight) {
         mapBlocksInFlight.erase(entry.hash);
     }
+    //删除孤儿同步
     EraseOrphansFor(nodeid);
     nPreferredDownload -= state->fPreferredDownload;
     nPeersWithValidatedDownloads -= (state->nBlocksInFlightValidHeaders != 0);
@@ -269,11 +271,14 @@ void FinalizeNode(NodeId nodeid, bool& fUpdateConnectionTime) {
 
 // Requires cs_main.
 // Returns a bool indicating whether we requested this block.
+//标记某个记录为接收到
 bool MarkBlockAsReceived(const uint256& hash) {
     map<uint256, pair<NodeId, list<QueuedBlock>::iterator> >::iterator itInFlight = mapBlocksInFlight.find(hash);
     if (itInFlight != mapBlocksInFlight.end()) {
         CNodeState *state = State(itInFlight->second.first);
+        //减去这个连接总共还有几个需要同步的
         state->nBlocksInFlightValidHeaders -= itInFlight->second.second->fValidatedHeaders;
+        //总同步连接的个数
         if (state->nBlocksInFlightValidHeaders == 0 && itInFlight->second.second->fValidatedHeaders) {
             // Last validated block on the queue was received.
             nPeersWithValidatedDownloads--;
@@ -282,6 +287,7 @@ bool MarkBlockAsReceived(const uint256& hash) {
             // First block on the queue was received, update the start download time for the next one
             state->nDownloadingSince = std::max(state->nDownloadingSince, GetTimeMicros());
         }
+        //删除下载记录数据
         state->vBlocksInFlight.erase(itInFlight->second.second);
         state->nBlocksInFlight--;
         state->nStallingSince = 0;
@@ -292,12 +298,13 @@ bool MarkBlockAsReceived(const uint256& hash) {
 }
 
 // Requires cs_main.
+//标记为开始下载记录
 void MarkBlockAsInFlight(NodeId nodeid, const uint256& hash, const Consensus::Params& consensusParams, CBlockIndex *pindex = NULL) {
     CNodeState *state = State(nodeid);
     assert(state != NULL);
 
     // Make sure it's not listed somewhere already.
-    MarkBlockAsReceived(hash);
+    MarkBlockAsReceived(hash);//是不下载完了？？？？？？ 这个肯定是 bug
 
     QueuedBlock newentry = {hash, pindex, pindex != NULL};
     list<QueuedBlock>::iterator it = state->vBlocksInFlight.insert(state->vBlocksInFlight.end(), newentry);
@@ -348,6 +355,7 @@ void UpdateBlockAvailability(NodeId nodeid, const uint256 &hash) {
 }
 
 // Requires cs_main
+//当顶部块比较接近当前时间的时候，直接下载，别犹豫
 bool CanDirectFetch(const Consensus::Params &consensusParams)
 {
     return chainActive.Tip()->GetBlockTime() > GetAdjustedTime() - consensusParams.nPowTargetSpacing * 20;
@@ -503,7 +511,7 @@ void UnregisterNodeSignals(CNodeSignals& nodeSignals)
 //
 // mapOrphanTransactions
 //
-
+// 接收到的孤儿信息，先不广播，等父亲来了，再广播
 bool AddOrphanTx(const CTransaction& tx, NodeId peer) EXCLUSIVE_LOCKS_REQUIRED(cs_main)
 {
     uint256 hash = tx.GetHash();
@@ -533,7 +541,7 @@ bool AddOrphanTx(const CTransaction& tx, NodeId peer) EXCLUSIVE_LOCKS_REQUIRED(c
              mapOrphanTransactions.size(), mapOrphanTransactionsByPrev.size());
     return true;
 }
-
+//删除孤儿交易
 void static EraseOrphanTx(uint256 hash) EXCLUSIVE_LOCKS_REQUIRED(cs_main)
 {
     map<uint256, COrphanTx>::iterator it = mapOrphanTransactions.find(hash);
@@ -550,7 +558,7 @@ void static EraseOrphanTx(uint256 hash) EXCLUSIVE_LOCKS_REQUIRED(cs_main)
     }
     mapOrphanTransactions.erase(it);
 }
-
+//删除某个连接的所有孤儿交易
 void EraseOrphansFor(NodeId peer)
 {
     int nErased = 0;
@@ -567,7 +575,7 @@ void EraseOrphansFor(NodeId peer)
     if (nErased > 0) LogPrint("mempool", "Erased %d orphan tx from peer %d\n", nErased, peer);
 }
 
-
+//限制孤儿交易大小
 unsigned int LimitOrphanTxSize(unsigned int nMaxOrphans) EXCLUSIVE_LOCKS_REQUIRED(cs_main)
 {
     unsigned int nEvicted = 0;
@@ -615,16 +623,16 @@ void Misbehaving(NodeId pnode, int howmuch)
 //
 // blockchain -> download logic notification
 //
-
+// 同步区块的回调
 PeerLogicValidation::PeerLogicValidation(CConnman* connmanIn) : connman(connmanIn) {
     // Initialize global variables that cannot be constructed at startup.
     recentRejects.reset(new CRollingBloomFilter(120000, 0.000001));
 }
-
+//接收到块，更新最高块
 void PeerLogicValidation::UpdatedBlockTip(const CBlockIndex *pindexNew, const CBlockIndex *pindexFork, bool fInitialDownload) {
     const int nNewHeight = pindexNew->nHeight;
     connman->SetBestHeight(nNewHeight);
-
+    //块已经初始化好了
     if (!fInitialDownload) {
         // Find the hashes of all blocks that weren't previously in the best chain.
         std::vector<uint256> vHashes;
@@ -639,6 +647,7 @@ void PeerLogicValidation::UpdatedBlockTip(const CBlockIndex *pindexNew, const CB
             }
         }
         // Relay inventory, but don't relay old inventory during initial block download.
+        //通知所有节点，最高块已经接收到了，您们不用再更新这个块了
         connman->ForEachNode([nNewHeight, &vHashes](CNode* pnode) {
             if (nNewHeight > (pnode->nStartingHeight != -1 ? pnode->nStartingHeight - 2000 : 0)) {
                 BOOST_REVERSE_FOREACH(const uint256& hash, vHashes) {
@@ -650,7 +659,7 @@ void PeerLogicValidation::UpdatedBlockTip(const CBlockIndex *pindexNew, const CB
 
     nTimeBestReceived = GetTime();
 }
-//当接受到一个块的时候，会通知所有连接这个块的状态，
+//当接受到一个块的时候，检查块的状态，通知删除接收列表
 void PeerLogicValidation::BlockChecked(const CBlock& block, const CValidationState& state) {
     LOCK(cs_main);
 
@@ -752,7 +761,7 @@ bool static AlreadyHave(const CInv& inv) EXCLUSIVE_LOCKS_REQUIRED(cs_main)
     // Don't know what it is, just say we already got one
     return true;
 }
-
+//把接收到的地址通过广播中继到其他连接
 static void RelayAddress(const CAddress& addr, bool fReachable, CConnman& connman)
 {
     int nRelayNodes = fReachable ? 2 : 1; // limited relaying of addresses outside our network(s)
@@ -785,7 +794,7 @@ static void RelayAddress(const CAddress& addr, bool fReachable, CConnman& connma
 
     connman.ForEachNodeThen(std::move(sortfunc), std::move(pushfunc));
 }
-
+//别人要数据，咱们准备数据
 void static ProcessGetData(CNode* pfrom, const Consensus::Params& consensusParams, CConnman& connman, std::atomic<bool>& interruptMsgProc)
 {
     std::deque<CInv>::iterator it = pfrom->vRecvGetData.begin();
@@ -793,10 +802,11 @@ void static ProcessGetData(CNode* pfrom, const Consensus::Params& consensusParam
 
     LOCK(cs_main);
 
-    while (it != pfrom->vRecvGetData.end()) {
+    while (it != pfrom->vRecvGetData.end()) { //开始准备数据
         // Don't bother if send buffer is too full to respond anyway
-        if (pfrom->fPauseSend)
+        if (pfrom->fPauseSend )
             break;
+        //vSendMsg 太多了，是不是不行  需要修改
 
         const CInv &inv = *it;
         LogPrint("net", "ProcessGetData -- inv = %s\n", inv.ToString());
@@ -812,9 +822,9 @@ void static ProcessGetData(CNode* pfrom, const Consensus::Params& consensusParam
                 BlockMap::iterator mi = mapBlockIndex.find(inv.hash);
                 if (mi != mapBlockIndex.end())
                 {
-                    if (chainActive.Contains(mi->second)) {
+                    if (chainActive.Contains(mi->second)) {//找到
                         send = true;
-                    } else {
+                    } else {//当前链没有找到
                         static const int nOneMonth = 30 * 24 * 60 * 60;
                         // To prevent fingerprinting attacks, only send blocks outside of the active
                         // chain if they are valid, and no more than a month older (both in time, and in
@@ -829,6 +839,7 @@ void static ProcessGetData(CNode* pfrom, const Consensus::Params& consensusParam
                 }
                 // disconnect node in case we have reached the outbound limit for serving historical blocks
                 // never disconnect whitelisted nodes
+                // 连接太多了
                 static const int nOneWeek = 7 * 24 * 60 * 60; // assume > 1 week = historical
                 if (send && connman.OutboundTargetReached(true) && ( ((pindexBestHeader != NULL) && (pindexBestHeader->GetBlockTime() - mi->second->GetBlockTime() > nOneWeek)) || inv.type == MSG_FILTERED_BLOCK) && !pfrom->fWhitelisted)
                 {
@@ -845,12 +856,12 @@ void static ProcessGetData(CNode* pfrom, const Consensus::Params& consensusParam
                     CBlock block;
                     if (!ReadBlockFromDisk(block, (*mi).second, consensusParams))
                         assert(!"cannot load block from disk");
-                    if (inv.type == MSG_BLOCK)
+                    if (inv.type == MSG_BLOCK)//直接发块信息
                         connman.PushMessage(pfrom, NetMsgType::BLOCK, block);
                     else // MSG_FILTERED_BLOCK)
                     {
                         LOCK(pfrom->cs_filter);
-                        if (pfrom->pfilter)
+                        if (pfrom->pfilter)//发送轻钱包需要的 filter
                         {
                             CMerkleBlock merkleBlock(block, *pfrom->pfilter);
                             connman.PushMessage(pfrom, NetMsgType::MERKLEBLOCK, merkleBlock);
@@ -1073,6 +1084,7 @@ void static ProcessGetData(CNode* pfrom, const Consensus::Params& consensusParam
         // having to download the entire memory pool.
         connman.PushMessage(pfrom, NetMsgType::NOTFOUND, vNotFound);
     }
+    //
 }
 
 bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t nTimeReceived, CConnman& connman, std::atomic<bool>& interruptMsgProc)
@@ -1081,13 +1093,13 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
     RandAddSeedPerfmon();
 
     LogPrint("net", "received: %s (%u bytes) peer=%d\n", SanitizeString(strCommand), vRecv.size(), pfrom->id);
-
+    //删除消息
     if (mapArgs.count("-dropmessagestest") && GetRand(atoi(mapArgs["-dropmessagestest"])) == 0)
     {
         LogPrintf("dropmessagestest DROPPING RECV MESSAGE\n");
         return true;
     }
-
+    //轻钱包 NODE_BLOOM 如果不支持，直接退出
     if (!(pfrom->GetLocalServices() & NODE_BLOOM) &&
               (strCommand == NetMsgType::FILTERLOAD ||
                strCommand == NetMsgType::FILTERADD ||
@@ -1097,7 +1109,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             LOCK(cs_main);
             Misbehaving(pfrom->GetId(), 100);
             return false;
-        } else if (GetBoolArg("-enforcenodebloom", false)) {
+        } else if (GetBoolArg("-enforcenodebloom", false)) {//本机强制 bloom 关闭连接
             pfrom->fDisconnect = true;
             return false;
         }
@@ -1113,7 +1125,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         }
         // Each connection can only send one version message
         // 每次连接只发送一次版本号 否则 拒绝 消息，并认为是 攻击，攻击计数 +1
-        if (pfrom->nVersion != 0)
+        if (pfrom->nVersion != 0)//已经接收过了
         {
             connman.PushMessageWithVersion(pfrom, INIT_PROTO_VERSION, NetMsgType::REJECT, strCommand, REJECT_DUPLICATE, string("Duplicate version message"));
             LOCK(cs_main);
@@ -1169,7 +1181,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         if (!vRecv.empty()) {
             vRecv >> nStartingHeight;//对方区块高度
         }
-        if (!vRecv.empty())
+        if (!vRecv.empty())//是不是需要广播
             vRecv >> fRelay;
         // Disconnect if we connected to ourself 自己连接自己，自己给自己发送 Version
         if (pfrom->fInbound && !connman.CheckIncomingNonce(nNonce))
@@ -1256,7 +1268,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
 
         int64_t nTimeOffset = nTime - GetTime();
         pfrom->nTimeOffset = nTimeOffset;
-        AddTimeData(pfrom->addr, nTimeOffset);
+        AddTimeData(pfrom->addr, nTimeOffset);//计算时区，矫正
     }
 
 
@@ -1349,11 +1361,11 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
     }
 
 
-    else if (strCommand == NetMsgType::INV)
+    else if (strCommand == NetMsgType::INV)//集中数据，在 Processdata中准备的数据
     {
         vector<CInv> vInv;
         vRecv >> vInv;
-        if (vInv.size() > MAX_INV_SZ)
+        if (vInv.size() > MAX_INV_SZ)//一次传递数据太大，认为时攻击
         {
             LOCK(cs_main);
             Misbehaving(pfrom->GetId(), 20);
@@ -1442,7 +1454,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
     }
 
 
-    else if (strCommand == NetMsgType::GETDATA)
+    else if (strCommand == NetMsgType::GETDATA)//要数据
     {
         vector<CInv> vInv;
         vRecv >> vInv;
@@ -1464,7 +1476,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
     }
 
 
-    else if (strCommand == NetMsgType::GETBLOCKS)
+    else if (strCommand == NetMsgType::GETBLOCKS)//取信息
     {
         CBlockLocator locator;
         uint256 hashStop;
@@ -1482,7 +1494,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         LogPrint("net", "getblocks %d to %s limit %d from peer=%d\n", (pindex ? pindex->nHeight : -1), hashStop.IsNull() ? "end" : hashStop.ToString(), nLimit, pfrom->id);
         for (; pindex; pindex = chainActive.Next(pindex))
         {
-            if (pindex->GetBlockHash() == hashStop)
+            if (pindex->GetBlockHash() == hashStop)//一直到某个地方
             {
                 LogPrint("net", "  getblocks stopping at %d %s\n", pindex->nHeight, pindex->GetBlockHash().ToString());
                 break;
@@ -1495,7 +1507,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                 LogPrint("net", " getblocks stopping, pruned or too old block at %d %s\n", pindex->nHeight, pindex->GetBlockHash().ToString());
                 break;
             }
-            pfrom->PushInventory(CInv(MSG_BLOCK, pindex->GetBlockHash()));
+            pfrom->PushInventory(CInv(MSG_BLOCK, pindex->GetBlockHash()));//加入待发送列表，sendmessage处理
             if (--nLimit <= 0)
             {
                 // When this block is requested, we'll send an inv that'll
@@ -1512,7 +1524,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
     //MSG_BLOCK 立即要头部、
     //MSG_BLOCK 延迟要 
     // fSyncStarted 开始块同步 
-    else if (strCommand == NetMsgType::GETHEADERS)
+    else if (strCommand == NetMsgType::GETHEADERS)//取头部信息
     {
         CBlockLocator locator;
         uint256 hashStop;
@@ -1560,7 +1572,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         connman.PushMessage(pfrom, NetMsgType::HEADERS, vHeaders);
     }
 
-
+    //发送过来的交易信息
     else if (strCommand == NetMsgType::TX || strCommand == NetMsgType::DSTX || strCommand == NetMsgType::TXLOCKREQUEST)
     {
         // Stop processing the transaction early if
@@ -1776,7 +1788,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         }
     }
 
-
+    //发送过来的头部信息
     else if (strCommand == NetMsgType::HEADERS && !fImporting && !fReindex) // Ignore headers received while importing
     {
         std::vector<CBlockHeader> headers;
@@ -1894,7 +1906,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         }
         }
     }
-
+    //发送过来的块信息
     else if (strCommand == NetMsgType::BLOCK && !fImporting && !fReindex) // Ignore blocks received while importing
     {
         CBlock block;
@@ -2202,7 +2214,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
 
     return true;
 }
-
+//这两个是主要工作消息，一个处理接收到的消息，一个发送消息
 bool ProcessMessages(CNode* pfrom, CConnman& connman, std::atomic<bool>& interruptMsgProc)
 {
     const CChainParams& chainparams = Params();
@@ -2216,22 +2228,23 @@ bool ProcessMessages(CNode* pfrom, CConnman& connman, std::atomic<bool>& interru
     //
     bool fMoreWork = false;
 
-    if (!pfrom->vRecvGetData.empty())
+    if (!pfrom->vRecvGetData.empty()) //如果有需要发送的数据，准备数据
         ProcessGetData(pfrom, chainparams.GetConsensus(), connman, interruptMsgProc);
 
     if (pfrom->fDisconnect)
         return false;
 
     // this maintains the order of responses
-    if (!pfrom->vRecvGetData.empty()) return true;
+    if (!pfrom->vRecvGetData.empty()) //必须准备完，但是sendmsg可能会爆了
+       return true;
 
         // Don't bother if send buffer is too full to respond anyway
         if (pfrom->fPauseSend)
             return false;
 
-        std::list<CNetMessage> msgs;
+        std::list<CNetMessage> msgs;//取出要处理的消息
         {
-            LOCK(pfrom->cs_vProcessMsg);
+            LOCK(pfrom->cs_vProcessMsg);//没消息要处理
             if (pfrom->vProcessMsg.empty())
                 return false;
             // Just take one message
@@ -2263,7 +2276,7 @@ bool ProcessMessages(CNode* pfrom, CConnman& connman, std::atomic<bool>& interru
         unsigned int nMessageSize = hdr.nMessageSize;
 
         // Checksum
-        CDataStream& vRecv = msg.vRecv;
+        CDataStream& vRecv = msg.vRecv;//校验hash值
         uint256 hash = Hash(vRecv.begin(), vRecv.begin() + nMessageSize);
         if (memcmp(hash.begin(), hdr.pchChecksum, CMessageHeader::CHECKSUM_SIZE) != 0)
         {
@@ -2321,6 +2334,7 @@ bool SendMessages(CNode* pto, CConnman& connman, std::atomic<bool>& interruptMsg
     const Consensus::Params& consensusParams = chainParams.GetConsensus();
     {
         // Don't send anything until the version handshake is complete
+        //没有握手成功
         if (!pto->fSuccessfullyConnected || pto->fDisconnect)
             return true;
 
@@ -2328,10 +2342,10 @@ bool SendMessages(CNode* pto, CConnman& connman, std::atomic<bool>& interruptMsg
         // Message: ping
         //
         bool pingSend = false;
-        if (pto->fPingQueued) {//用户要求ping所有连接节点
+        if (pto->fPingQueued) {//用户要求ping所有连接节点 RPC 发送的，
             // RPC ping request by user
             pingSend = true;
-        }//nPingNonceSent 接受到　PONG  会　＝　０
+        }//nPingNonceSent 接受到　PONG  会　＝　０ 隔断时间发 Ping 保证连接
         if (pto->nPingNonceSent == 0 && pto->nPingUsecStart + PING_INTERVAL * 1000000 < GetTimeMicros()) {
             // Ping automatically sent as a latency probe & keepalive.　定时发送　ping
             pingSend = true;
@@ -2406,16 +2420,23 @@ bool SendMessages(CNode* pto, CConnman& connman, std::atomic<bool>& interruptMsg
             state.fShouldBan = false;//重置状态
         }
         //PeerLogicValidation::BlockChecked 收到块并检查后，会通知到所有连接，如果是拒绝的块会写入　rejects
+        //发送所有收到，但是拒绝的块
         BOOST_FOREACH(const CBlockReject& reject, state.rejects)
             connman.PushMessage(pto, NetMsgType::REJECT, (string)NetMsgType::BLOCK, reject.chRejectCode, reject.strRejectReason, reject.hashBlock);
         state.rejects.clear();
 
         // Start block sync
-        if (pindexBestHeader == NULL)
+        // 开始同步块哈，这个是重点
+        if (pindexBestHeader == NULL)//最后收到的有效块
             pindexBestHeader = chainActive.Tip();
+        //nPreferredDownload 正在下载的连接的总数
+        //state.fPreferredDownload VERSION中收到，是否需要下载块
+        //判断是否这个连接可以下载块信息
         bool fFetch = state.fPreferredDownload || (nPreferredDownload == 0 && !pto->fClient && !pto->fOneShot); // Download if this is a nice peer, or we have no nice peers and this one might do.
+        //如果没有开始 state.fSyncStarted
         if (!state.fSyncStarted && !pto->fClient && !fImporting && !fReindex) {
             // Only actively request headers from a single peer, unless we're close to end of initial download.
+            //仅仅从一个连接下载，除非块小于 6 小时
             if ((nSyncStarted == 0 && fFetch) || pindexBestHeader->GetBlockTime() > GetAdjustedTime() - 6 * 60 * 60) { // NOTE: was "close to today" and 24h in Bitcoin
                 state.fSyncStarted = true;
                 state.nHeadersSyncTimeout = GetTimeMicros() + HEADERS_DOWNLOAD_TIMEOUT_BASE + HEADERS_DOWNLOAD_TIMEOUT_PER_HEADER * (GetAdjustedTime() - pindexBestHeader->GetBlockTime())/(consensusParams.nPowTargetSpacing);
@@ -2429,12 +2450,13 @@ bool SendMessages(CNode* pto, CConnman& connman, std::atomic<bool>& interruptMsg
                    if we requested starting at pindexBestHeader and
                    got back an empty response.  */
                 if (pindexStart->pprev)
-                    pindexStart = pindexStart->pprev;
+                    pindexStart = pindexStart->pprev;//从上一个块开始下载
                 LogPrint("net", "initial getheaders (%d) to peer=%d (startheight:%d)\n", pindexStart->nHeight, pto->id, pto->nStartingHeight);
                 connman.PushMessage(pto, NetMsgType::GETHEADERS, chainActive.GetLocator(pindexStart), uint256());
             }
         }
-
+        //为避免从一次下载太多头部，所以 MSg_Block 中会塞一部分给 vBlockHashesFromINV 避免传输数据太多
+        //这里继续处理
         if (chainParams.DelayGetHeadersTime() != 0 && pindexBestHeader->GetBlockTime() >= GetAdjustedTime() - chainParams.DelayGetHeadersTime()) {
             // Headers chain has catched up enough so we can send out GETHEADER messages which were initially meant to
             // be sent directly after INV was received
@@ -2449,7 +2471,7 @@ bool SendMessages(CNode* pto, CConnman& connman, std::atomic<bool>& interruptMsg
         // Resend wallet transactions that haven't gotten in a block yet
         // Except during reindex, importing and IBD, when old wallet
         // transactions become unconfirmed and spams other nodes.
-        //隔断时间 广播 钱包信息
+        //隔断时间 广播 钱包信息  CWallet::ResendWalletTransactions 广播最后 5 分钟的交易
         if (!fReindex && !fImporting && !IsInitialBlockDownload())
         {
             GetMainSignals().Broadcast(nTimeBestReceived, &connman);
@@ -2581,15 +2603,16 @@ bool SendMessages(CNode* pto, CConnman& connman, std::atomic<bool>& interruptMsg
                 pto->nNextInvSend = PoissonNextSend(nNow, AVG_INVENTORY_BROADCAST_INTERVAL);
             }
             LOCK(pto->cs_inventory);
+            //需要发送的数据
             vInv.reserve(std::min<size_t>(1000, pto->vInventoryToSend.size()));
             vInvWait.reserve(pto->vInventoryToSend.size());
             BOOST_FOREACH(const CInv& inv, pto->vInventoryToSend)
             {
-                if (inv.type == MSG_TX && pto->filterInventoryKnown.contains(inv.hash))
+                if (inv.type == MSG_TX && pto->filterInventoryKnown.contains(inv.hash))//已经知道的，不发送
                     continue;
 
                 // trickle out tx inv to protect privacy
-                if (inv.type == MSG_TX && !fSendTrickle)
+                if (inv.type == MSG_TX && !fSendTrickle)//隔断时间再发送 TX
                 {
                     // 1/4 of tx invs blast to all immediately
                     static uint256 hashSalt;
@@ -2611,21 +2634,22 @@ bool SendMessages(CNode* pto, CConnman& connman, std::atomic<bool>& interruptMsg
 
                 LogPrint("net", "SendMessages -- queued inv: %s  index=%d peer=%d\n", inv.ToString(), vInv.size(), pto->id);
                 vInv.push_back(inv);
-                if (vInv.size() >= 1000)
+                if (vInv.size() >= 1000)//最多1000
                 {
                     LogPrint("net", "SendMessages -- pushing inv's: count=%d peer=%d\n", vInv.size(), pto->id);
                     connman.PushMessage(pto, NetMsgType::INV, vInv);
                     vInv.clear();
                 }
             }
-            pto->vInventoryToSend = vInvWait;
+            pto->vInventoryToSend = vInvWait;//等待发送的
         }
+        // 1000个之后，发送剩余的
         if (!vInv.empty()) {
             LogPrint("net", "SendMessages -- pushing tailing inv's: count=%d peer=%d\n", vInv.size(), pto->id);
             connman.PushMessage(pto, NetMsgType::INV, vInv);
         }
 
-        // Detect whether we're stalling
+        // Detect whether we're stalling 看看是否活着呢
         nNow = GetTimeMicros();
         if (!pto->fDisconnect && state.nStallingSince && state.nStallingSince < nNow - 1000000 * BLOCK_STALLING_TIMEOUT) {
             // Stalling only triggers when the block download window cannot move. During normal steady state,
@@ -2639,7 +2663,7 @@ bool SendMessages(CNode* pto, CConnman& connman, std::atomic<bool>& interruptMsg
         // We compensate for other peers to prevent killing off peers due to our own downstream link
         // being saturated. We only count validated in-flight blocks so peers can't advertise non-existing block hashes
         // to unreasonably increase our timeout.
-        if (!pto->fDisconnect && state.vBlocksInFlight.size() > 0) {
+        if (!pto->fDisconnect && state.vBlocksInFlight.size() > 0) {//等待接收块数据，长时间没有来，关闭连接
             QueuedBlock &queuedBlock = state.vBlocksInFlight.front();
             int nOtherPeersWithValidatedDownloads = nPeersWithValidatedDownloads - (state.nBlocksInFlightValidHeaders > 0);
             if (nNow > state.nDownloadingSince + consensusParams.nPowTargetSpacing * (BLOCK_DOWNLOAD_TIMEOUT_BASE + BLOCK_DOWNLOAD_TIMEOUT_PER_PEER * nOtherPeersWithValidatedDownloads)) {
@@ -2648,6 +2672,7 @@ bool SendMessages(CNode* pto, CConnman& connman, std::atomic<bool>& interruptMsg
             }
         }
         // Check for headers sync timeouts
+        //同步头部信息，长时间没来，关闭连接
         if (state.fSyncStarted && state.nHeadersSyncTimeout < std::numeric_limits<int64_t>::max()) {
             // Detect whether this is a stalling initial-headers-sync peer
             if (pindexBestHeader->GetBlockTime() <= GetAdjustedTime() - 6*60*60) { // was 24*60*60 in bitcoin
@@ -2684,6 +2709,7 @@ bool SendMessages(CNode* pto, CConnman& connman, std::atomic<bool>& interruptMsg
         //
         // Message: getdata (blocks)
         //
+        //继续取块数据
         vector<CInv> vGetData;
         if (!pto->fDisconnect && !pto->fClient && (fFetch || !IsInitialBlockDownload()) && state.nBlocksInFlight < MAX_BLOCKS_IN_TRANSIT_PER_PEER) {
             vector<CBlockIndex*> vToDownload;
@@ -2706,6 +2732,7 @@ bool SendMessages(CNode* pto, CConnman& connman, std::atomic<bool>& interruptMsg
         //
         // Message: getdata (non-blocks)
         //
+        // 继续取其他数据 CNode::AskFor 中送进来的
         while (!pto->fDisconnect && !pto->mapAskFor.empty() && (*pto->mapAskFor.begin()).first <= nNow)
         {
             const CInv& inv = (*pto->mapAskFor.begin()).second;
