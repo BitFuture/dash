@@ -1337,7 +1337,7 @@ void CheckForkWarningConditions()
         return;
 
     // If our best fork is no longer within 72 blocks (+/- 3 hours if no one mines it)
-    // of our head, drop it
+    // of our head, drop it 当修改时间的时候，这个要改哦 
     if (pindexBestForkTip && chainActive.Height() - pindexBestForkTip->nHeight >= 72)
         pindexBestForkTip = NULL;
 
@@ -1380,8 +1380,8 @@ void CheckForkWarningConditionsOnNewFork(CBlockIndex* pindexNewForkTip)
 {
     AssertLockHeld(cs_main);
     // If we are on a fork that is sufficiently large, set a warning flag
-    CBlockIndex* pfork = pindexNewForkTip;
-    CBlockIndex* plonger = chainActive.Tip();
+    CBlockIndex* pfork = pindexNewForkTip;//最后一个连接的
+    CBlockIndex* plonger = chainActive.Tip();//顶部
     while (pfork && pfork != plonger)
     {
         while (plonger && plonger->nHeight > pfork->nHeight)
@@ -1698,13 +1698,15 @@ int ApplyTxInUndo(Coin&& undo, CCoinsViewCache& view, const COutPoint& out)
 
 /** Undo the effects of this block (with given index) on the UTXO set represented by coins.
  *  When UNCLEAN or FAILED is returned, view is left in an indeterminate state. */
+//这个有点复杂，就是回退这个块中已经加入的交易信息
 static DisconnectResult DisconnectBlock(const CBlock& block, CValidationState& state, const CBlockIndex* pindex, CCoinsViewCache& view)
-{
+{   //确认是最顶部块
     assert(pindex->GetBlockHash() == view.GetBestBlock());
 
     bool fClean = true;
 
     CBlockUndo blockUndo;
+    //读回退信息
     CDiskBlockPos pos = pindex->GetUndoPos();
     if (pos.IsNull()) {
         error("DisconnectBlock(): no undo data available");
@@ -1714,7 +1716,7 @@ static DisconnectResult DisconnectBlock(const CBlock& block, CValidationState& s
         error("DisconnectBlock(): failure reading undo data");
         return DISCONNECT_FAILED;
     }
-
+   //如果回退交易数不想等，退出
     if (blockUndo.vtxundo.size() + 1 != block.vtx.size()) {
         error("DisconnectBlock(): block and undo data inconsistent");
         return DISCONNECT_FAILED;
@@ -1724,7 +1726,7 @@ static DisconnectResult DisconnectBlock(const CBlock& block, CValidationState& s
     std::vector<std::pair<CAddressUnspentKey, CAddressUnspentValue> > addressUnspentIndex;
     std::vector<std::pair<CSpentIndexKey, CSpentIndexValue> > spentIndex;
 
-    // undo transactions in reverse order
+    // undo transactions in reverse order 倒序
     for (int i = block.vtx.size() - 1; i >= 0; i--) {
         const CTransaction &tx = block.vtx[i];
         uint256 hash = tx.GetHash();
@@ -1831,7 +1833,7 @@ static DisconnectResult DisconnectBlock(const CBlock& block, CValidationState& s
     // move best block pointer to prevout block
     view.SetBestBlock(pindex->pprev->GetBlockHash());
 
-    if (fAddressIndex) {
+    if (fAddressIndex) {//从数据库中删除交易记录
         if (!pblocktree->EraseAddressIndex(addressIndex)) {
             AbortNode(state, "Failed to delete address index");
             return DISCONNECT_FAILED;
@@ -2487,29 +2489,31 @@ void static UpdateTip(CBlockIndex *pindexNew) {
 }
 
 /** Disconnect chainActive's tip. You probably want to call mempool.removeForReorg and manually re-limit mempool size after this, with cs_main held. */
+//删除当前激活链的顶部数据
 bool static DisconnectTip(CValidationState& state, const Consensus::Params& consensusParams)
 {
     CBlockIndex *pindexDelete = chainActive.Tip();
     assert(pindexDelete);
     // Read block from disk.
     CBlock block;
+    //读块数据
     if (!ReadBlockFromDisk(block, pindexDelete, consensusParams))
         return AbortNode(state, "Failed to read block");
     // Apply the block atomically to the chain state.
     int64_t nStart = GetTimeMicros();
     {
-        CCoinsViewCache view(pcoinsTip);
+        CCoinsViewCache view(pcoinsTip);//回退数据
         if (DisconnectBlock(block, state, pindexDelete, view) != DISCONNECT_OK)
             return error("DisconnectTip(): DisconnectBlock %s failed", pindexDelete->GetBlockHash().ToString());
         assert(view.Flush());
     }
     LogPrint("bench", "- Disconnect block: %.2fms\n", (GetTimeMicros() - nStart) * 0.001);
-    // Write the chain state to disk, if necessary.
+    // Write the chain state to disk, if necessary. 写盘
     if (!FlushStateToDisk(state, FLUSH_STATE_IF_NEEDED))
         return false;
     // Resurrect mempool transactions from the disconnected block.
     std::vector<uint256> vHashUpdate;
-    BOOST_FOREACH(const CTransaction &tx, block.vtx) {
+    BOOST_FOREACH(const CTransaction &tx, block.vtx) {//退回交易池
         // ignore validation errors in resurrected transactions
         list<CTransaction> removed;
         CValidationState stateDummy;
@@ -2529,6 +2533,7 @@ bool static DisconnectTip(CValidationState& state, const Consensus::Params& cons
     UpdateTip(pindexDelete->pprev);
     // Let wallets know transactions went from 1-confirmed to
     // 0-confirmed or conflicted:
+    // 通知数据，类似来了新交易
     BOOST_FOREACH(const CTransaction &tx, block.vtx) {
         GetMainSignals().SyncTransaction(tx, NULL);
     }
@@ -2649,15 +2654,16 @@ void ReprocessBlocks(int nBlocks)
  * Return the tip of the chain with the most work in it, that isn't
  * known to be invalid (it's however far from certain to be valid).
  *///找到最多工作量的块 chainActive 必须在这个里面，否则处理 setBlockIndexCandidates
+ //
 static CBlockIndex* FindMostWorkChain() {
     do {
         CBlockIndex *pindexNew = NULL;
 
         // Find the best candidate header.
-        {   //所有接受到的块 最后一个
+        {   // setBlockIndexCandidates 保存着最后接受到的块头，取最后一个
             std::set<CBlockIndex*, CBlockIndexWorkComparator>::reverse_iterator it = setBlockIndexCandidates.rbegin();
             if (it == setBlockIndexCandidates.rend()) //这个地方真正退出，找到  setBlockIndexCandidates 中在 chainActive 有连接的块
-                return NULL;
+                return NULL;//当所有接受到的块头都处理完，还没有找到就返回空
             pindexNew = *it;
         }
 
@@ -2665,6 +2671,7 @@ static CBlockIndex* FindMostWorkChain() {
         // Just going until the active chain is an optimization, as we know all blocks in it are valid already.
         CBlockIndex *pindexTest = pindexNew;
         bool fInvalidAncestor = false;
+        //从取得的最新块头，找激活链中和自己连接到一起的块头，如果已经在链中，直接退出
         while (pindexTest && !chainActive.Contains(pindexTest)) {//如果最后块不在链中
             assert(pindexTest->nChainTx || pindexTest->nHeight == 0);
 
@@ -2672,34 +2679,36 @@ static CBlockIndex* FindMostWorkChain() {
             // which block files have been deleted.  Remove those as candidates
             // for the most work chain if we come across them; we can't switch
             // to a chain unless we have all the non-active-chain parent blocks.
-            bool fFailedChain = pindexTest->nStatus & BLOCK_FAILED_MASK;
-            bool fMissingData = !(pindexTest->nStatus & BLOCK_HAVE_DATA);
+            bool fFailedChain = pindexTest->nStatus & BLOCK_FAILED_MASK; //错误的块
+            bool fMissingData = !(pindexTest->nStatus & BLOCK_HAVE_DATA);//没有数据
             if (fFailedChain || fMissingData) {//如果数据不合法，第一个就不合法，直接退出，否则后面的全部 unlink
                 // Candidate chain is not usable (either invalid or missing data)
                 if (fFailedChain && (pindexBestInvalid == NULL || pindexNew->nChainWork > pindexBestInvalid->nChainWork))
-                    pindexBestInvalid = pindexNew;
+                    pindexBestInvalid = pindexNew;//最大算力的不合法数据
                 CBlockIndex *pindexFailed = pindexNew;
                 // Remove the entire chain from the set.
                 while (pindexTest != pindexFailed) {
+                    //如果是第一个，不进来 
+                    // 否则 从 setBlockIndexCandidates 找到的pindexNew那个起，到当前这个止 pindexTest pindexTest 比 pindexNew 小 全部干掉
                     if (fFailedChain) {
-                        pindexFailed->nStatus |= BLOCK_FAILED_CHILD;
+                        pindexFailed->nStatus |= BLOCK_FAILED_CHILD;//前面的区块全部搞成失败状态
                     } else if (fMissingData) {
                         // If we're missing data, then add back to mapBlocksUnlinked,
                         // so that if the block arrives in the future we can try adding
                         // to setBlockIndexCandidates again.
                         mapBlocksUnlinked.insert(std::make_pair(pindexFailed->pprev, pindexFailed));
                     }
-                    setBlockIndexCandidates.erase(pindexFailed);
+                    setBlockIndexCandidates.erase(pindexFailed);//从接受块中干掉
                     pindexFailed = pindexFailed->pprev;
                 }
                 setBlockIndexCandidates.erase(pindexTest);
-                fInvalidAncestor = true;
+                fInvalidAncestor = true; //没找到，继续下一个
                 break;
             }
             pindexTest = pindexTest->pprev;
         }
         if (!fInvalidAncestor)
-            return pindexNew;
+            return pindexNew;//找到啦
     } while(true);
 }
 
@@ -2730,11 +2739,11 @@ static bool ActivateBestChainStep(CValidationState& state, const CChainParams& c
     while (chainActive.Tip() && chainActive.Tip() != pindexFork) {//从有效位置，删除块
         if (!DisconnectTip(state, chainparams.GetConsensus()))
             return false;
-        fBlocksDisconnected = true;
+        fBlocksDisconnected = true;//删除过顶部
     }
 
     // Build list of new blocks to connect.
-    std::vector<CBlockIndex*> vpindexToConnect;
+    std::vector<CBlockIndex*> vpindexToConnect;//需要连接的块
     bool fContinue = true;
     int nHeight = pindexFork ? pindexFork->nHeight : -1;
     while (fContinue && nHeight != pindexMostWork->nHeight) {
@@ -2756,7 +2765,7 @@ static bool ActivateBestChainStep(CValidationState& state, const CChainParams& c
                 if (state.IsInvalid()) {
                     // The block violates a consensus rule.
                     if (!state.CorruptionPossible())
-                        InvalidChainFound(vpindexToConnect.back());
+                        InvalidChainFound(vpindexToConnect.back());//通知失败块
                     state = CValidationState();
                     fInvalidFound = true;
                     fContinue = false;
@@ -2766,7 +2775,7 @@ static bool ActivateBestChainStep(CValidationState& state, const CChainParams& c
                     return false;
                 }
             } else {
-                PruneBlockIndexCandidates();
+                PruneBlockIndexCandidates();//已经加到顶部，接受列表之下的全部删除
                 if (!pindexOldTip || chainActive.Tip()->nChainWork > pindexOldTip->nChainWork) {
                     // We're in a better position than we were. Return temporarily to release the lock.
                     fContinue = false;
@@ -2776,8 +2785,9 @@ static bool ActivateBestChainStep(CValidationState& state, const CChainParams& c
         }
     }
 
-    if (fBlocksDisconnected) {//删除比顶块大的
+    if (fBlocksDisconnected) {//删除不必要的交易，尤其是以删除块奖励为来源的消费
         mempool.removeForReorg(pcoinsTip, chainActive.Tip()->nHeight + 1, STANDARD_LOCKTIME_VERIFY_FLAGS);
+        //限制池子大小
         LimitMempoolSize(mempool, GetArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000, GetArg("-mempoolexpiry", DEFAULT_MEMPOOL_EXPIRY) * 60 * 60);
     }
     mempool.check(pcoinsTip);
@@ -2836,19 +2846,21 @@ bool ActivateBestChain(CValidationState &state, const CChainParams& chainparams,
             }
 
             // Whether we have anything to do at all.
+            // 最大算力没有，或者已经是当前激活块顶部，不用工作了
             if (pindexMostWork == NULL || pindexMostWork == chainActive.Tip())//如果已经是顶部
-                return true;
+                return true;//直到找到或者没有最新块头为止
 
             bool fInvalidFound = false;
+            //激活 pindexMostWork
             if (!ActivateBestChainStep(state, chainparams, pindexMostWork, pblock && pblock->GetHash() == pindexMostWork->GetBlockHash() ? pblock : NULL, fInvalidFound))
                 return false;
 
-            if (fInvalidFound) {
+            if (fInvalidFound) { //激活失败，重新开始找最大的算力块，继续循环
                 // Wipe cache, we may need another branch now.
-                pindexMostWork = NULL;
+                pindexMostWork = NULL; //这个地方是不是直接 continue ?
             }
-            pindexNewTip = chainActive.Tip();
-            pindexFork = chainActive.FindFork(pindexOldTip);
+            pindexNewTip = chainActive.Tip();//新的顶部
+            pindexFork = chainActive.FindFork(pindexOldTip);//旧的顶部在新的链中的连接
             fInitialDownload = IsInitialBlockDownload();
         }
         // When we reach this point, we switched to a new tip (stored in pindexNewTip).
@@ -2866,10 +2878,10 @@ bool ActivateBestChain(CValidationState &state, const CChainParams& chainparams,
         if (pindexFork != pindexNewTip) {
             uiInterface.NotifyBlockTip(fInitialDownload, pindexNewTip);
         }
-    } while (pindexNewTip != pindexMostWork);
-    CheckBlockIndex(chainparams.GetConsensus());
+    } while (pindexNewTip != pindexMostWork);//最新算力块加到了顶部
+    CheckBlockIndex(chainparams.GetConsensus());//整理整个头部
 
-    // Write changes periodically to disk, after relay.
+    // Write changes periodically to disk, after relay. 写磁盘
     if (!FlushStateToDisk(state, FLUSH_STATE_PERIODIC)) {
         return false;
     }
