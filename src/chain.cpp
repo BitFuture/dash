@@ -75,6 +75,10 @@ int static inline GetSkipHeight(int height) {
     // up to 2**18 blocks).
     return (height & 1) ? InvertLowestOne(InvertLowestOne(height - 1)) + 1 : InvertLowestOne(height);
 }
+//跳跃表（skiplist）介绍
+//   定义：跳跃表是一个有序链表，其中每个节点包含不定数量的链接，节点中的第i个链接构成的单向链表跳过含有少于i个链接的节点。
+//   跳跃表支持平均O(logN)，最坏O(N)复杂度的节点查找，大部分情况下，跳跃表的效率可以和平衡树相媲美。
+//   跳跃表在redis中当数据较多时作为有序集合键的实现方式之一。
 
 CBlockIndex* CBlockIndex::GetAncestor(int height)
 {
@@ -107,7 +111,7 @@ const CBlockIndex* CBlockIndex::GetAncestor(int height) const
     return const_cast<CBlockIndex*>(this)->GetAncestor(height);
 }
 
-void CBlockIndex::BuildSkip()
+void CBlockIndex::BuildSkip()//?????????
 {
     if (pprev)
         pskip = pprev->GetAncestor(GetSkipHeight(nHeight));

@@ -167,7 +167,7 @@ public:
     CBlockIndex* pprev;//前一区块
 
     //! pointer to the index of some further predecessor of this block
-    CBlockIndex* pskip;
+    CBlockIndex* pskip; //跳跃表（skiplist）
 
     //! height of the entry in the chain. The genesis block has height 0
     int nHeight;//区块高度
@@ -197,7 +197,7 @@ public:
     unsigned int nStatus;
 
  //! (memory only) Sequential id assigned to distinguish order in which blocks are received.
-    uint32_t nSequenceId;
+    uint32_t nSequenceId;//如果仅仅接受到头部，为0 如果接受到块数据，内部计数+1,仅仅为了防止矿工只广播头，而不广播数据，取得竞争优势。
 
     //! block header
     int nVersion;            // 版本

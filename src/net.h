@@ -752,8 +752,8 @@ public:
     std::vector<uint256> vBlockHashesFromINV;
 
     // Block and TXN accept times
-    std::atomic<int64_t> nLastBlockTime;
-    std::atomic<int64_t> nLastTXTime;
+    std::atomic<int64_t> nLastBlockTime; //最后接收到块的时间
+    std::atomic<int64_t> nLastTXTime;//最后接收到交易的时间
 
     // Ping time measurement:
     // The pong reply we're expecting, or 0 if no pong expected.

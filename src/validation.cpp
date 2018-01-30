@@ -138,11 +138,13 @@ namespace {
      * The set of all CBlockIndex entries with BLOCK_VALID_TRANSACTIONS (for itself and all ancestors) and
      * as good as our current tip or better. Entries may be failed, though, and pruning nodes may be
      * missing the data for the block.
-     */
+     */     
     set<CBlockIndex*, CBlockIndexWorkComparator> setBlockIndexCandidates;
     /** All pairs A->B, where A (or one of its ancestors) misses transactions, but B has transactions.
      * Pruned nodes may have entries where B is missing data.
      */
+    //收到块信息，可能不是连续的，高的块先到，先保存在这里，类私孤儿块，当前面的块到了的时候，再处理这个块，
+    //块接受不一定是先低后高，也不一定从一个连接得到。
     multimap<CBlockIndex*, CBlockIndex*> mapBlocksUnlinked;
 
     CCriticalSection cs_LastBlockFile;
@@ -160,7 +162,7 @@ namespace {
      */
     CCriticalSection cs_nBlockSequenceId;
     /** Blocks loaded from disk are assigned id 0, so start the counter at 1. */
-    uint32_t nBlockSequenceId = 1;
+    uint32_t nBlockSequenceId = 1;//每接受到一个块自动加1 没有什么特殊意义
 
     /** Dirty block index entries. */
     set<CBlockIndex*> setDirtyBlockIndex;
@@ -2646,15 +2648,15 @@ void ReprocessBlocks(int nBlocks)
 /**
  * Return the tip of the chain with the most work in it, that isn't
  * known to be invalid (it's however far from certain to be valid).
- */
+ *///找到最多工作量的块 chainActive 必须在这个里面，否则处理 setBlockIndexCandidates
 static CBlockIndex* FindMostWorkChain() {
     do {
         CBlockIndex *pindexNew = NULL;
 
         // Find the best candidate header.
-        {   //所有接受到的块
+        {   //所有接受到的块 最后一个
             std::set<CBlockIndex*, CBlockIndexWorkComparator>::reverse_iterator it = setBlockIndexCandidates.rbegin();
-            if (it == setBlockIndexCandidates.rend())
+            if (it == setBlockIndexCandidates.rend()) //这个地方真正退出，找到  setBlockIndexCandidates 中在 chainActive 有连接的块
                 return NULL;
             pindexNew = *it;
         }
@@ -2663,7 +2665,7 @@ static CBlockIndex* FindMostWorkChain() {
         // Just going until the active chain is an optimization, as we know all blocks in it are valid already.
         CBlockIndex *pindexTest = pindexNew;
         bool fInvalidAncestor = false;
-        while (pindexTest && !chainActive.Contains(pindexTest)) {
+        while (pindexTest && !chainActive.Contains(pindexTest)) {//如果最后块不在链中
             assert(pindexTest->nChainTx || pindexTest->nHeight == 0);
 
             // Pruned nodes may have entries in setBlockIndexCandidates for
@@ -2672,7 +2674,7 @@ static CBlockIndex* FindMostWorkChain() {
             // to a chain unless we have all the non-active-chain parent blocks.
             bool fFailedChain = pindexTest->nStatus & BLOCK_FAILED_MASK;
             bool fMissingData = !(pindexTest->nStatus & BLOCK_HAVE_DATA);
-            if (fFailedChain || fMissingData) {//如果数据不合法
+            if (fFailedChain || fMissingData) {//如果数据不合法，第一个就不合法，直接退出，否则后面的全部 unlink
                 // Candidate chain is not usable (either invalid or missing data)
                 if (fFailedChain && (pindexBestInvalid == NULL || pindexNew->nChainWork > pindexBestInvalid->nChainWork))
                     pindexBestInvalid = pindexNew;
@@ -2716,16 +2718,16 @@ static void PruneBlockIndexCandidates() {
 /**
  * Try to make some progress towards making pindexMostWork the active block.
  * pblock is either NULL or a pointer to a CBlock corresponding to pindexMostWork.
- */
+ *///pindexMostWork 找到工作量最大的块 pblock 当前块或者空
 static bool ActivateBestChainStep(CValidationState& state, const CChainParams& chainparams, CBlockIndex* pindexMostWork, const CBlock* pblock, bool& fInvalidFound)
 {
     AssertLockHeld(cs_main);
-    const CBlockIndex *pindexOldTip = chainActive.Tip();
-    const CBlockIndex *pindexFork = chainActive.FindFork(pindexMostWork);
+    const CBlockIndex *pindexOldTip = chainActive.Tip();//旧顶部
+    const CBlockIndex *pindexFork = chainActive.FindFork(pindexMostWork);//从当前块中找到跟自己链在一起的块，无论是否分叉，总有一个和自己在一起
 
     // Disconnect active blocks which are no longer in the best chain.
     bool fBlocksDisconnected = false;
-    while (chainActive.Tip() && chainActive.Tip() != pindexFork) {
+    while (chainActive.Tip() && chainActive.Tip() != pindexFork) {//从有效位置，删除块
         if (!DisconnectTip(state, chainparams.GetConsensus()))
             return false;
         fBlocksDisconnected = true;
@@ -2738,18 +2740,18 @@ static bool ActivateBestChainStep(CValidationState& state, const CChainParams& c
     while (fContinue && nHeight != pindexMostWork->nHeight) {
         // Don't iterate the entire list of potential improvements toward the best tip, as we likely only need
         // a few blocks along the way.
-        int nTargetHeight = std::min(nHeight + 32, pindexMostWork->nHeight);
+        int nTargetHeight = std::min(nHeight + 32, pindexMostWork->nHeight);//最多32分叉
         vpindexToConnect.clear();
         vpindexToConnect.reserve(nTargetHeight - nHeight);
         CBlockIndex *pindexIter = pindexMostWork->GetAncestor(nTargetHeight);
-        while (pindexIter && pindexIter->nHeight != nHeight) {
+        while (pindexIter && pindexIter->nHeight != nHeight) {//从最好块中找到所有的
             vpindexToConnect.push_back(pindexIter);
             pindexIter = pindexIter->pprev;
         }
         nHeight = nTargetHeight;
 
         // Connect new blocks.
-        BOOST_REVERSE_FOREACH(CBlockIndex *pindexConnect, vpindexToConnect) {
+        BOOST_REVERSE_FOREACH(CBlockIndex *pindexConnect, vpindexToConnect) {//重新连接所有块
             if (!ConnectTip(state, chainparams, pindexConnect, pindexConnect == pindexMostWork ? pblock : NULL)) {
                 if (state.IsInvalid()) {
                     // The block violates a consensus rule.
@@ -2774,7 +2776,7 @@ static bool ActivateBestChainStep(CValidationState& state, const CChainParams& c
         }
     }
 
-    if (fBlocksDisconnected) {
+    if (fBlocksDisconnected) {//删除比顶块大的
         mempool.removeForReorg(pcoinsTip, chainActive.Tip()->nHeight + 1, STANDARD_LOCKTIME_VERIFY_FLAGS);
         LimitMempoolSize(mempool, GetArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000, GetArg("-mempoolexpiry", DEFAULT_MEMPOOL_EXPIRY) * 60 * 60);
     }
@@ -2820,21 +2822,21 @@ bool ActivateBestChain(CValidationState &state, const CChainParams& chainparams,
     CBlockIndex *pindexMostWork = NULL;
     CBlockIndex *pindexNewTip = NULL;
     do {
-        boost::this_thread::interruption_point();
-        if (ShutdownRequested())
+        boost::this_thread::interruption_point();//是否有中断
+        if (ShutdownRequested())//是否关闭程序
             break;
 
         const CBlockIndex *pindexFork;
         bool fInitialDownload;
         {
             LOCK(cs_main);
-            CBlockIndex *pindexOldTip = chainActive.Tip();
+            CBlockIndex *pindexOldTip = chainActive.Tip();//保存旧的顶部
             if (pindexMostWork == NULL) {
                 pindexMostWork = FindMostWorkChain();
             }
 
             // Whether we have anything to do at all.
-            if (pindexMostWork == NULL || pindexMostWork == chainActive.Tip())
+            if (pindexMostWork == NULL || pindexMostWork == chainActive.Tip())//如果已经是顶部
                 return true;
 
             bool fInvalidFound = false;
@@ -2960,8 +2962,8 @@ CBlockIndex* AddToBlockIndex(const CBlockHeader& block)
     CBlockIndex* pindexNew = new CBlockIndex(block);
     assert(pindexNew);
     // We assign the sequence id to blocks only when the full data is available,//
-    // to avoid miners withholding blocks but broadcasting headers, to get a 避免矿工扣留块数据，仅仅广播头部。
-    // competitive advantage. 竞争优势
+    // to avoid miners withholding blocks but broadcasting headers, to get a competitive advantage. 
+    // 避免矿工扣留块数据，仅仅广播头部。 竞争优势
     pindexNew->nSequenceId = 0;
     BlockMap::iterator mi = mapBlockIndex.insert(make_pair(hash, pindexNew)).first;//插入到index列表
     pindexNew->phashBlock = &((*mi).first);
@@ -3136,7 +3138,7 @@ bool CheckBlock(const CBlock& block, CValidationState& state, bool fCheckPOW, bo
 {
     // These are checks that are independent of context.
 
-    if (block.fChecked)
+    if (block.fChecked)//已经检查过了
         return true;
 
     // Check that the header is valid (particularly PoW).  This is mostly
@@ -3264,7 +3266,7 @@ static bool CheckIndexAgainstCheckpoint(const CBlockIndex* pindexPrev, CValidati
 
     return true;
 }
-
+//检查版本
 bool ContextualCheckBlockHeader(const CBlockHeader& block, CValidationState& state, CBlockIndex * const pindexPrev)
 {
    
@@ -3435,9 +3437,9 @@ bool ProcessNewBlockHeaders(const std::vector<CBlockHeader>& headers, CValidatio
     return true;
 }
 
-/** Store block on disk. If dbp is non-NULL, the file is known to already reside on disk */
+/** Store block on disk. If dbp is non-NULL, the file is known to already reside on disk */ 
 static bool AcceptBlock(const CBlock& block, CValidationState& state, const CChainParams& chainparams, CBlockIndex** ppindex, bool fRequested, const CDiskBlockPos* dbp, bool* fNewBlock)
-{
+{//接受到块信息，或者挖矿产生新块
     if (fNewBlock) *fNewBlock = false;
     AssertLockHeld(cs_main);
 
@@ -3445,13 +3447,13 @@ static bool AcceptBlock(const CBlock& block, CValidationState& state, const CCha
     CBlockIndex *&pindex = ppindex ? *ppindex : pindexDummy;
 
     if (!AcceptBlockHeader(block, state, chainparams, &pindex)) //接受头部
-        return false;
+        return false; //如果是新块，这个里面找到了，就不检查
 
     // Try to process all requested blocks that we don't have, but only
     // process an unrequested block if it's new and has enough work to
     // advance our tip, and isn't too many blocks ahead.
     bool fAlreadyHave = pindex->nStatus & BLOCK_HAVE_DATA;//块是否已经存在
-    bool fHasMoreWork = (chainActive.Tip() ? pindex->nChainWork > chainActive.Tip()->nChainWork : true);//算力是否符合要求
+    bool fHasMoreWork = (chainActive.Tip() ? pindex->nChainWork > chainActive.Tip()->nChainWork : true);//算力是否符合要求，算力比当前块大
     // Blocks that are too out-of-order needlessly limit the effectiveness of
     // pruning, because pruning will not delete block files that contain any
     // blocks which are too close in height to the tip.  Apply this test
@@ -3466,11 +3468,11 @@ static bool AcceptBlock(const CBlock& block, CValidationState& state, const CCha
 
     // TODO: deal better with return value and error conditions for duplicate
     // and unrequested blocks.
-    if (fAlreadyHave) return true; //已经存在
-    if (!fRequested) {  // If we didn't ask for it:
+    if (fAlreadyHave) return true; //已经有数据了存在
+    if (!fRequested) {  // If we didn't ask for it: fRequested 挖矿为 true 接收为 fWhitelisted 白名单，或者已经接收到头部信息 为 true ,否则为 false  
         if (pindex->nTx != 0) return true;  // This is a previously-processed block that was pruned
         if (!fHasMoreWork) return true;     // Don't process less-work chains
-        if (fTooFarAhead) return true;      // Block height is too high
+        if (fTooFarAhead) return true;      // Block height is too high  如果不是强制接受，退出了。
     }
     if (fNewBlock) *fNewBlock = true;
 
@@ -3519,7 +3521,72 @@ static bool IsSuperMajority(int minVersion, const CBlockIndex* pstart, unsigned 
     return (nFound >= nRequired);
 }
 
+//挖矿和网络上接受到块数据都走到这里
+//挖矿 通过这个 走过来的 ProcessBlockFound 
 
+// ProcessNewBlock
+// {
+//   AcceptBlock
+//  {
+//    AcceptBlockHeader 检查头部或者添加头部信息
+//    fRequested 为false 检查算力太小，无交易，时间高度不对，退出
+//    CheckBlock
+//    {
+//      CheckBlockHeader 重新检查头部算力或者时间
+//      fCheckMerkleRoot 检查MerkleRoot 交易数据合法
+//      交易为空，块尺寸过大退出
+//      交易为空，第一个不是挖矿奖励退出
+//      挖矿奖励多于1个退出
+//      快速交易检查，reject block
+//      CheckTransaction 检查所有交易
+//      {
+//        入出不为空
+//        大小合法
+//        钱的数目合法，在某个大小范围内
+//        输入不能重复
+//        奖励交易签名》2《100
+//        非奖励交易入必须有来源
+//      }
+//      签名总数不能超标
+//    }
+//    ContextualCheckBlock
+//    {
+//      VersionBitsState
+//      nMaxBlockSize 检查块大小
+//      IsFinalTx 检查所有交易时间及合法性
+//      GetLegacySigOpCount 检查签名总数
+//      检查版本号
+//    }
+//    FindBlockPos 找写块的文件位置
+//    WriteBlockToDisk 写块到文件
+//    ReceivedBlockTransactions
+//   { 
+//      填充块头
+//      如果块有前面的块
+//      {
+//        nSequenceId ++ 代表块头接受到数据了
+//        setBlockIndexCandidates 如果不是当前链的头部，寄存在这里
+//        mapBlocksUnlinked 删除没有连接的块，因为块来的顺序有早晚，高的块先寄存在这里，如果找到继续循环
+//                          类似孤儿块     }
+//      else
+//      {
+//        mapBlocksUnlinked.insert
+//      }
+//   }
+//   通知刷新数据库，写块
+
+//  }
+//  CheckBlockIndex 新块，新头部，ActivateBestChain 激活链调用
+//  {
+//  }
+//  NotifyHeaderTip 通知头部信息更新
+//  ActivateBestChain 防止分叉
+//   ActivateBestChainStep 根据算力最大的作为新链
+//   {
+//       通知界面，tip 发生变化
+//       通知所有数据中心，tip发生变化
+ //    }     
+// }
 bool ProcessNewBlock(const CChainParams& chainparams, const CBlock* pblock, bool fForceProcessing, const CDiskBlockPos* dbp, bool *fNewBlock)
 {
     {
@@ -4166,7 +4233,7 @@ bool LoadExternalBlockFile(const CChainParams& chainparams, FILE* fileIn, CDiskB
         LogPrintf("Loaded %i blocks from external file in %dms\n", nLoaded, GetTimeMillis() - nStart);
     return nLoaded > 0;
 }
-
+//检查所有头部信息
 void static CheckBlockIndex(const Consensus::Params& consensusParams)
 {
     if (!fCheckBlockIndex) {

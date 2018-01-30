@@ -70,7 +70,7 @@ int nSyncStarted = 0;
      * messages or ban them when processing happens afterwards. Protected by
      * cs_main.
      */
-map<uint256, NodeId> mapBlockSource; //正在接收的块
+map<uint256, NodeId> mapBlockSource; //正在接收的块，接受到的块，PeerLogicValidation::BlockChecked 要用到
 
 /**
      * Filter for transactions that were recently rejected by
@@ -277,7 +277,7 @@ void FinalizeNode(NodeId nodeid, bool& fUpdateConnectionTime)
 
 // Requires cs_main.
 // Returns a bool indicating whether we requested this block.
-//标记某个记录为接收到
+//标记某个记录为接收到  vBlocksInFlight mapBlocksInFlight 中存储这已经发送过要数据的记录，数据到达的时候，要清除
 bool MarkBlockAsReceived(const uint256& hash)
 {
     map<uint256, pair<NodeId, list<QueuedBlock>::iterator> >::iterator itInFlight = mapBlocksInFlight.find(hash);
@@ -312,7 +312,7 @@ void MarkBlockAsInFlight(NodeId nodeid, const uint256& hash, const Consensus::Pa
     assert(state != NULL);
 
     // Make sure it's not listed somewhere already.
-    MarkBlockAsReceived(hash); //是不下载完了？？？？？？ 这个肯定是 bug
+    MarkBlockAsReceived(hash); //如果已经加过了，清空上次加入的状态
 
     QueuedBlock newentry = {hash, pindex, pindex != NULL};
     list<QueuedBlock>::iterator it = state->vBlocksInFlight.insert(state->vBlocksInFlight.end(), newentry);
@@ -1829,7 +1829,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                 }
             }
             //是否可以直接取blockdata
-             //如果不立刻取 FindNextBlocksToDownload 发送 MSG_BLOCK 
+             //如果不立刻取 FindNextBlocksToDownload 发送 NetMsgType::GETDATA MSG_BLOCK  返回 NetMsgType::BLOCK
             bool fCanDirectFetch = CanDirectFetch(chainparams.GetConsensus());
             CNodeState* nodestate = State(pfrom->GetId());
             // If this set of headers is valid and ends in a block with at least as
@@ -1855,7 +1855,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                         pindexLast->GetBlockHash().ToString(),
                         pindexLast->nHeight);
                 } else {//立刻取block
-                //如果不立刻取 FindNextBlocksToDownload 发送 MSG_BLOCK 
+                //如果不立刻取 FindNextBlocksToDownload 发送 NetMsgType::GETDATA MSG_BLOCK  返回 NetMsgType::BLOCK
                     vector<CInv> vGetData;
                     // Download as much as possible, from earliest to latest.
                     BOOST_REVERSE_FOREACH (CBlockIndex* pindex, vToFetch) {
@@ -1888,7 +1888,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         CInv inv(MSG_BLOCK, block.GetHash());
         LogPrint("net", "received block %s peer=%d\n", inv.hash.ToString(), pfrom->id);
 
-        pfrom->AddInventoryKnown(inv);
+        pfrom->AddInventoryKnown(inv);//证明已经接受过了
 
         // Process all blocks from whitelisted peers, even if not requested,
         // unless we're still syncing with the network.
@@ -1900,10 +1900,10 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             LOCK(cs_main);
             // Also always process if we requested the block explicitly, as we may
             // need it even though it is not a candidate for a new best tip.
-            forceProcessing |= MarkBlockAsReceived(hash);
+            forceProcessing |= MarkBlockAsReceived(hash);//清除接受状态
             // mapBlockSource is only used for sending reject messages and DoS scores,
             // so the race between here and cs_main in ProcessNewBlock is fine.
-            mapBlockSource.emplace(hash, pfrom->GetId());
+            mapBlockSource.emplace(hash, pfrom->GetId());//添加保存
         }
         bool fNewBlock = false;
         ProcessNewBlock(chainparams, &block, forceProcessing, NULL, &fNewBlock);
