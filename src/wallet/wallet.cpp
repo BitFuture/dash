@@ -3822,11 +3822,15 @@ bool CWallet::TopUpKeyPool(unsigned int kpSize)
             } else {
                 setExternalKeyPool.insert(nEnd);
             }
+            if(nEnd %10==0)
+            {
             LogPrintf("keypool added key %d, size=%u, internal=%d\n", nEnd, setInternalKeyPool.size() + setExternalKeyPool.size(), fInternal);
 
             double dProgress = 100.f * nEnd / (nTargetSize + 1);
+
             std::string strMsg = strprintf(_("Loading wallet... (%3.2f %%)"), dProgress);
             uiInterface.InitMessage(strMsg);
+            }
         }
     }
     return true;

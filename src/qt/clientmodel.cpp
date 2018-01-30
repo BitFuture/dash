@@ -365,7 +365,7 @@ static void BlockTipChanged(ClientModel *clientmodel, bool initialSync, const CB
         nLastUpdateNotification = now;
     }
 }
-
+//CMasternodeSync::ProcessTick  中发送过来的
 static void NotifyAdditionalDataSyncProgressChanged(ClientModel *clientmodel, double nSyncProgress)
 {
     QMetaObject::invokeMethod(clientmodel, "additionalDataSyncProgressChanged", Qt::QueuedConnection,

@@ -2185,7 +2185,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
     pdsNotificationInterface->InitializeCurrentBlockTip();
 
     // ********************************************************* Step 11d: start dash-ps-<smth> threads
-
+    //ThreadCheckPrivateSend 同步masternode数据
     threadGroup.create_thread(boost::bind(&ThreadCheckPrivateSend, boost::ref(*g_connman)));
     if (fMasterNode)
         threadGroup.create_thread(boost::bind(&ThreadCheckPrivateSendServer, boost::ref(*g_connman)));

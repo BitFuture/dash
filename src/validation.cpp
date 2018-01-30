@@ -61,9 +61,9 @@ using namespace std;
 
 CCriticalSection cs_main;
 
-BlockMap mapBlockIndex;
+BlockMap mapBlockIndex;//所有块头部
 CChain chainActive;
-CBlockIndex *pindexBestHeader = NULL;
+CBlockIndex *pindexBestHeader = NULL;//最后接受到的块的头部
 CWaitableCriticalSection csBestBlock;
 CConditionVariable cvBlockChange;
 int nScriptCheckThreads = 0;
@@ -2854,6 +2854,10 @@ bool ActivateBestChain(CValidationState &state, const CChainParams& chainparams,
         // Notifications/callbacks that can run without cs_main
 
         // Notify external listeners about the new tip.
+        // 通知所有人，更新末梢
+        // PeerLogicValidation::UpdatedBlockTip 添加到 所有连接的  PushBlockHash 
+        // vBlockHashesToAnnounce 在sendmessage的时候，广播给所有节点，HEADSER,
+        // 所有节点GETBLOCK 同步块数据
         GetMainSignals().UpdatedBlockTip(pindexNewTip, pindexFork, fInitialDownload);
 
         // Always notify the UI if a new block tip was connected
@@ -3360,7 +3364,7 @@ bool ContextualCheckBlock(const CBlock& block, CValidationState& state, CBlockIn
 
     return true;
 }
-
+//接受头部信息
 static bool AcceptBlockHeader(const CBlockHeader& block, CValidationState& state, const CChainParams& chainparams, CBlockIndex** ppindex)
 {
     AssertLockHeld(cs_main);
@@ -3416,7 +3420,7 @@ static bool AcceptBlockHeader(const CBlockHeader& block, CValidationState& state
     return true;
 }
 
-// Exposed wrapper for AcceptBlockHeader
+// Exposed wrapper for AcceptBlockHeader 检查新收到的头部信息
 bool ProcessNewBlockHeaders(const std::vector<CBlockHeader>& headers, CValidationState& state, const CChainParams& chainparams, CBlockIndex** ppindex)
 {
     {
