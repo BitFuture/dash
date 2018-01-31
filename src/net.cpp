@@ -81,8 +81,8 @@ static bool vfLimited[NET_MAX] = {};
 static CNode* pnodeLocalHost = NULL;
 std::string strSubVersion;
 
-std::map<CInv, CDataStream> mapRelay;
-std::deque<pair<int64_t, CInv> > vRelayExpiration;
+std::map<CInv, CDataStream> mapRelay;//接受到的交易
+std::deque<pair<int64_t, CInv> > vRelayExpiration;//设定一时间，到时候，清除 mapRelay
 CCriticalSection cs_mapRelay;
 limitedmap<uint256, int64_t> mapAlreadyAskedFor(MAX_INV_SZ);
 
@@ -2512,7 +2512,7 @@ void CConnman::RelayTransaction(const CTransaction& tx)
     }
     RelayTransaction(tx, ss);
 }
-
+//广播交易
 void CConnman::RelayTransaction(const CTransaction& tx, const CDataStream& ss)
 {
     uint256 hash = tx.GetHash();
@@ -2533,6 +2533,7 @@ void CConnman::RelayTransaction(const CTransaction& tx, const CDataStream& ss)
         vRelayExpiration.push_back(std::make_pair(GetTime() + 15 * 60, inv));
     }
     LOCK(cs_vNodes);
+    //加入到每个连接的待发送列表
     BOOST_FOREACH(CNode* pnode, vNodes)
     {
         if(!pnode->fRelayTxes)

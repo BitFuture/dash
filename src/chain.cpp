@@ -85,8 +85,8 @@ CBlockIndex* CBlockIndex::GetAncestor(int height)
     if (height > nHeight || height < 0)
         return NULL;
 
-    CBlockIndex* pindexWalk = this;
-    int heightWalk = nHeight;
+    CBlockIndex* pindexWalk = this;//遍历
+    int heightWalk = nHeight;//当前高度
     while (heightWalk > height) {
         int heightSkip = GetSkipHeight(heightWalk);
         int heightSkipPrev = GetSkipHeight(heightWalk - 1);

@@ -153,7 +153,7 @@ bool CCoinsViewCache::BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlockIn
                     // Otherwise we will need to create it in the parent
                     // and move the data up and mark it as dirty
                     CCoinsCacheEntry& entry = cacheCoins[it->first];
-                    entry.coin = std::move(it->second.coin);
+                    entry.coin = std::move(it->second.coin);//移动，并删除
                     cachedCoinsUsage += entry.coin.DynamicMemoryUsage();
                     entry.flags = CCoinsCacheEntry::DIRTY;
                     // We can mark it FRESH in the parent if it was FRESH in the child

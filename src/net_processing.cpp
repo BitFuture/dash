@@ -695,7 +695,7 @@ bool static AlreadyHave(const CInv& inv) EXCLUSIVE_LOCKS_REQUIRED(cs_main)
 {
     switch (inv.type) {
     case MSG_TX: {
-        assert(recentRejects);
+        assert(recentRejects);//顶部不一样
         if (chainActive.Tip()->GetBlockHash() != hashRecentRejectsChainTip) {
             // If the chain tip has changed previously rejected transactions
             // might be now valid, e.g. due to a nLockTime'd tx becoming valid,
@@ -894,7 +894,7 @@ void static ProcessGetData(CNode* pfrom, const Consensus::Params& consensusParam
                 {
                     CDataStream ss(SER_NETWORK, PROTOCOL_VERSION);
                     {
-                        LOCK(cs_mapRelay);
+                        LOCK(cs_mapRelay);//刚刚接受到的，直接使用，不用去交易池找
                         map<CInv, CDataStream>::iterator mi = mapRelay.find(inv);
                         if (mi != mapRelay.end()) {
                             ss += (*mi).second;
@@ -1547,6 +1547,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
     else if (strCommand == NetMsgType::TX || strCommand == NetMsgType::DSTX || strCommand == NetMsgType::TXLOCKREQUEST) {
         // Stop processing the transaction early if
         // We are in blocks only mode and peer is either not whitelisted or whitelistrelay is off
+        // 本机不接受交易数据，
         if (!fRelayTxes && (!pfrom->fWhitelisted || !GetBoolArg("-whitelistrelay", DEFAULT_WHITELISTRELAY))) {
             LogPrint("net", "transaction sent in violation of protocol peer=%d\n", pfrom->id);
             return true;
@@ -1560,21 +1561,21 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         int nInvType = MSG_TX;
 
         // Read data and assign inv type
-        if (strCommand == NetMsgType::TX) {
+        if (strCommand == NetMsgType::TX) {//正常交易数据
             vRecv >> tx;
-        } else if (strCommand == NetMsgType::TXLOCKREQUEST) {
+        } else if (strCommand == NetMsgType::TXLOCKREQUEST) {//交易锁定要求  快速交易
             vRecv >> txLockRequest;
             tx = txLockRequest;
             nInvType = MSG_TXLOCK_REQUEST;
-        } else if (strCommand == NetMsgType::DSTX) {
+        } else if (strCommand == NetMsgType::DSTX) {//混合交易
             vRecv >> dstx;
             tx = dstx.tx;
             nInvType = MSG_DSTX;
         }
 
         CInv inv(nInvType, tx.GetHash());
-        pfrom->AddInventoryKnown(inv);
-        pfrom->setAskFor.erase(inv.hash);
+        pfrom->AddInventoryKnown(inv);//已经接受过了，以后别发送这个交易的请求
+        pfrom->setAskFor.erase(inv.hash);//正准备要这个交易数据呢，来啦，就不要了
 
         // Process custom logic, no matter if tx will be accepted to mempool later or not
         if (strCommand == NetMsgType::TXLOCKREQUEST) {
@@ -1618,8 +1619,8 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         bool fMissingInputs = false;
         CValidationState state;
 
-        mapAlreadyAskedFor.erase(inv.hash);
-
+        mapAlreadyAskedFor.erase(inv.hash);//总请求表
+        //这个交易不存在，接受到交易池 
         if (!AlreadyHave(inv) && AcceptToMemoryPool(mempool, state, tx, true, &fMissingInputs)) {
             // Process custom txes, this changes AlreadyHave to "true"
             if (strCommand == NetMsgType::DSTX) {
@@ -1632,8 +1633,8 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                 instantsend.AcceptLockRequest(txLockRequest);
             }
 
-            mempool.check(pcoinsTip);
-            connman.RelayTransaction(tx);
+            mempool.check(pcoinsTip);//检查交易池和交易的一致性
+            connman.RelayTransaction(tx);//广播交易
             vWorkQueue.push_back(inv.hash);
 
             pfrom->nLastTXTime = GetTime();
@@ -1644,6 +1645,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                 mempool.size(), mempool.DynamicMemoryUsage() / 1000);
 
             // Recursively process any orphan transactions that depended on this one
+            // 找依赖自己的孤儿
             set<NodeId> setMisbehaving;
             for (unsigned int i = 0; i < vWorkQueue.size(); i++) {
                 map<uint256, set<uint256> >::iterator itByPrev = mapOrphanTransactionsByPrev.find(vWorkQueue[i]);
@@ -1654,7 +1656,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                      ++mi) {
                     const uint256& orphanHash = *mi;
                     const CTransaction& orphanTx = mapOrphanTransactions[orphanHash].tx;
-                    NodeId fromPeer = mapOrphanTransactions[orphanHash].fromPeer;
+                    NodeId fromPeer = mapOrphanTransactions[orphanHash].fromPeer;//从哪里来的孤儿
                     bool fMissingInputs2 = false;
                     // Use a dummy CValidationState so someone can't setup nodes to counter-DoS based on orphan
                     // resolution (that is, feeding people an invalid transaction based on LegitTxX in order to get
@@ -1666,31 +1668,31 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                         continue;
                     if (AcceptToMemoryPool(mempool, stateDummy, orphanTx, true, &fMissingInputs2)) {
                         LogPrint("mempool", "   accepted orphan tx %s\n", orphanHash.ToString());
-                        connman.RelayTransaction(orphanTx);
-                        vWorkQueue.push_back(orphanHash);
-                        vEraseQueue.push_back(orphanHash);
+                        connman.RelayTransaction(orphanTx);//广播本孤儿
+                        vWorkQueue.push_back(orphanHash);//继续找孤儿的孤儿
+                        vEraseQueue.push_back(orphanHash);//删除本孤儿  从孤儿列表中
                     } else if (!fMissingInputs2) {
                         int nDos = 0;
                         if (stateDummy.IsInvalid(nDos) && nDos > 0) {
                             // Punish peer that gave us an invalid orphan tx
                             Misbehaving(fromPeer, nDos);
-                            setMisbehaving.insert(fromPeer);
+                            setMisbehaving.insert(fromPeer);//这个连接不行，这个连接所接受到的所有孤儿都不要处理了
                             LogPrint("mempool", "   invalid orphan tx %s\n", orphanHash.ToString());
                         }
                         // Has inputs but not accepted to mempool
                         // Probably non-standard or insufficient fee/priority
                         LogPrint("mempool", "   removed orphan tx %s\n", orphanHash.ToString());
-                        vEraseQueue.push_back(orphanHash);
+                        vEraseQueue.push_back(orphanHash);//找到，被拒绝，理由不是没有in，也就删除吧
                         assert(recentRejects);
-                        recentRejects->insert(orphanHash);
+                        recentRejects->insert(orphanHash);//最近接受列表中还得有，避免重复接受无效的交易，接受的时候会判断 ishave
                     }
                     mempool.check(pcoinsTip);
                 }
             }
 
-            BOOST_FOREACH (uint256 hash, vEraseQueue)
+            BOOST_FOREACH (uint256 hash, vEraseQueue)//删除孤儿 
                 EraseOrphanTx(hash);
-        } else if (fMissingInputs) {
+        } else if (fMissingInputs) {//入没有找到父亲，认为是孤儿交易
             AddOrphanTx(tx, pfrom->GetId()); //加入孤儿池
 
             // DoS prevention: do not allow mapOrphanTransactions to grow unbounded
@@ -1698,10 +1700,10 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             unsigned int nEvicted = LimitOrphanTxSize(nMaxOrphanTx); //如果孤儿池大于一定数据，删除长期无效的交易
             if (nEvicted > 0)
                 LogPrint("mempool", "mapOrphan overflow, removed %u tx\n", nEvicted);
-        } else {
+        } else { 
             assert(recentRejects);
             recentRejects->insert(tx.GetHash());
-
+            //不在
             if (strCommand == NetMsgType::TXLOCKREQUEST && !AlreadyHave(inv)) {
                 // i.e. AcceptToMemoryPool failed, probably because it's conflicting
                 // with existing normal tx or tx lock for another tx. For the same tx lock
@@ -1714,7 +1716,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                 // this allows multiple conflicting lock requests to compete for votes
                 connman.RelayTransaction(tx);
             }
-
+            //强制广播
             if (pfrom->fWhitelisted && GetBoolArg("-whitelistforcerelay", DEFAULT_WHITELISTFORCERELAY)) {
                 // Always relay transactions received from whitelisted peers, even
                 // if they were already in the mempool or rejected from it due
@@ -1735,7 +1737,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         }
 
         int nDoS = 0;
-        if (state.IsInvalid(nDoS)) {
+        if (state.IsInvalid(nDoS)) {//攻击性数据
             LogPrint("mempoolrej", "%s from peer=%d was not accepted: %s\n", tx.GetHash().ToString(),
                 pfrom->id,
                 FormatStateMessage(state));
@@ -1930,8 +1932,8 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
     }
 
 
-    else if (strCommand == NetMsgType::MEMPOOL) {
-        if (connman.OutboundTargetReached(false) && !pfrom->fWhitelisted) {
+    else if (strCommand == NetMsgType::MEMPOOL) {//对方要所有交易池数据
+        if (connman.OutboundTargetReached(false) && !pfrom->fWhitelisted) {//连接太多了，并且对方不是白名单，拒绝。
             LogPrint("net", "mempool request with bandwidth limit reached, disconnect peer=%d\n", pfrom->GetId());
             pfrom->fDisconnect = true;
             return true;
@@ -1939,7 +1941,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         LOCK2(cs_main, pfrom->cs_filter);
 
         std::vector<uint256> vtxid;
-        mempool.queryHashes(vtxid);
+        mempool.queryHashes(vtxid);//从交易池中取得所有交易hash
         vector<CInv> vInv;
         BOOST_FOREACH (uint256& hash, vtxid) {
             CInv inv(MSG_TX, hash);
@@ -1948,16 +1950,16 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                 bool fInMemPool = mempool.lookup(hash, tx);
                 if (!fInMemPool)
                     continue; // another thread removed since queryHashes, maybe...
-                if (!pfrom->pfilter->IsRelevantAndUpdate(tx))
+                if (!pfrom->pfilter->IsRelevantAndUpdate(tx))//不符合搜索条件
                     continue;
             }
             vInv.push_back(inv);
-            if (vInv.size() == MAX_INV_SZ) {
+            if (vInv.size() == MAX_INV_SZ) {//每次发送不能超多大小
                 connman.PushMessage(pfrom, NetMsgType::INV, vInv);
                 vInv.clear();
             }
         }
-        if (vInv.size() > 0)
+        if (vInv.size() > 0)//剩余没有发送完的
             connman.PushMessage(pfrom, NetMsgType::INV, vInv);
     }
 

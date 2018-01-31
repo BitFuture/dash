@@ -609,10 +609,10 @@ void CTxMemPool::remove(const CTransaction &origTx, std::list<CTransaction>& rem
     {
         LOCK(cs);
         setEntries txToRemove;
-        txiter origit = mapTx.find(origTx.GetHash());
+        txiter origit = mapTx.find(origTx.GetHash());//从交易池中找到
         if (origit != mapTx.end()) {
-            txToRemove.insert(origit);
-        } else if (fRecursive) {
+            txToRemove.insert(origit);//直接加入
+        } else if (fRecursive) {//如果不存在，而且递归，加入所有子交易
             // If recursively removing but origTx isn't in the mempool
             // be sure to remove any children that are in the pool. This can
             // happen during chain re-orgs if origTx isn't re-accepted into
@@ -629,15 +629,15 @@ void CTxMemPool::remove(const CTransaction &origTx, std::list<CTransaction>& rem
         setEntries setAllRemoves;
         if (fRecursive) {
             BOOST_FOREACH(txiter it, txToRemove) {
-                CalculateDescendants(it, setAllRemoves);
+                CalculateDescendants(it, setAllRemoves);//递归
             }
         } else {
-            setAllRemoves.swap(txToRemove);
+            setAllRemoves.swap(txToRemove);//直接加入
         }
         BOOST_FOREACH(txiter it, setAllRemoves) {
-            removed.push_back(it->GetTx());
+            removed.push_back(it->GetTx());//把记录加入到 removed
         }
-        RemoveStaged(setAllRemoves);
+        RemoveStaged(setAllRemoves);//从交易池中删除记录
     }
 }
 
@@ -697,7 +697,7 @@ void CTxMemPool::removeConflicts(const CTransaction &tx, std::list<CTransaction>
 
 /**
  * Called when a block is connected. Removes from mempool and updates the miner fee estimator.
- */
+ *///当接受到一个块的时候，从交易池中把存在的记录删除，并且加入挖矿费用
 void CTxMemPool::removeForBlock(const std::vector<CTransaction>& vtx, unsigned int nBlockHeight,
                                 std::list<CTransaction>& conflicts, bool fCurrentEstimate)
 {
@@ -709,14 +709,14 @@ void CTxMemPool::removeForBlock(const std::vector<CTransaction>& vtx, unsigned i
 
         indexed_transaction_set::iterator i = mapTx.find(hash);
         if (i != mapTx.end())
-            entries.push_back(*i);
+            entries.push_back(*i);//把交易从内存池中找出来
     }
     BOOST_FOREACH(const CTransaction& tx, vtx)
     {
         std::list<CTransaction> dummy;
-        remove(tx, dummy, false);
-        removeConflicts(tx, conflicts);
-        ClearPrioritisation(tx.GetHash());
+        remove(tx, dummy, false);//删除记录，并且把记录放到 dummy ，不递归
+        removeConflicts(tx, conflicts);//删除依赖这个的交易，谁的 in 为这个交易的，也要删除
+        ClearPrioritisation(tx.GetHash());//删除交易费用的map index
     }
     // After the txs in the new block have been removed from the mempool, update policy estimates
     minerPolicyEstimator->processBlock(nBlockHeight, entries, fCurrentEstimate);
@@ -999,9 +999,9 @@ size_t CTxMemPool::DynamicMemoryUsage() const {
 
 void CTxMemPool::RemoveStaged(setEntries &stage) {
     AssertLockHeld(cs);
-    UpdateForRemoveFromMempool(stage);
+    UpdateForRemoveFromMempool(stage);//删除前，更新祖先和儿子
     BOOST_FOREACH(const txiter& it, stage) {
-        removeUnchecked(it);
+        removeUnchecked(it);//从交易池中删除记录
     }
 }
 

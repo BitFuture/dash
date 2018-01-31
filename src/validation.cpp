@@ -132,7 +132,7 @@ namespace {
         }
     };
 
-    CBlockIndex *pindexBestInvalid;
+    CBlockIndex *pindexBestInvalid;//最后一个无效的块
 
     /**
      * The set of all CBlockIndex entries with BLOCK_VALID_TRANSACTIONS (for itself and all ancestors) and
@@ -186,8 +186,8 @@ CBlockIndex* FindForkInGlobalIndex(const CChain& chain, const CBlockLocator& loc
     return chain.Genesis();
 }
 
-CCoinsViewDB *pcoinsdbview = NULL;
-CCoinsViewCache *pcoinsTip = NULL;
+CCoinsViewDB *pcoinsdbview = NULL;  //数据库中没有消费的记录  VerifyDB 中读数据库的时候填充
+CCoinsViewCache *pcoinsTip = NULL;  //内存中没有消费的记录  pcoinsTip 依赖 pcoinsdbview ConnectBlock 的时候填充
 CBlockTreeDB *pblocktree = NULL;    //这个类是用来向/blocks/index/*下面的文件进行读写操作
 
 enum FlushStateMode {
@@ -1327,7 +1327,7 @@ bool IsInitialBlockDownload()
 bool fLargeWorkForkFound = false;
 bool fLargeWorkInvalidChainFound = false;
 CBlockIndex *pindexBestForkTip = NULL, *pindexBestForkBase = NULL;
-
+//没有看明白
 void CheckForkWarningConditions()
 {
     AssertLockHeld(cs_main);
@@ -1339,10 +1339,10 @@ void CheckForkWarningConditions()
     // If our best fork is no longer within 72 blocks (+/- 3 hours if no one mines it)
     // of our head, drop it 当修改时间的时候，这个要改哦 
     if (pindexBestForkTip && chainActive.Height() - pindexBestForkTip->nHeight >= 72)
-        pindexBestForkTip = NULL;
-
+        pindexBestForkTip = NULL;//没有最后分叉的顶部
+    //pindexBestInvalid 最后一个不合法的块
     if (pindexBestForkTip || (pindexBestInvalid && pindexBestInvalid->nChainWork > chainActive.Tip()->nChainWork + (GetBlockProof(*chainActive.Tip()) * 6)))
-    {
+    {   //最后分叉的顶部，或者最大不合法大于6个合法顶部
         if (!fLargeWorkForkFound && pindexBestForkBase)
         {
             if(pindexBestForkBase->phashBlock){
@@ -1357,12 +1357,12 @@ void CheckForkWarningConditions()
                 LogPrintf("%s: Warning: Large valid fork found\n  forking the chain at height %d (%s)\n  lasting to height %d (%s).\nChain state database corruption likely.\n", __func__,
                        pindexBestForkBase->nHeight, pindexBestForkBase->phashBlock->ToString(),
                        pindexBestForkTip->nHeight, pindexBestForkTip->phashBlock->ToString());
-                fLargeWorkForkFound = true;
+                fLargeWorkForkFound = true;//最大分叉找到了
             }
         }
         else
         {
-            if(pindexBestInvalid->nHeight > chainActive.Height() + 6)
+            if(pindexBestInvalid->nHeight > chainActive.Height() + 6)//丢了6个
                 LogPrintf("%s: Warning: Found invalid chain at least ~6 blocks longer than our best chain.\nChain state database corruption likely.\n", __func__);
             else
                 LogPrintf("%s: Warning: Found invalid chain which has higher work (at least ~6 blocks worth of work) than our best chain.\nChain state database corruption likely.\n", __func__);
@@ -1380,9 +1380,9 @@ void CheckForkWarningConditionsOnNewFork(CBlockIndex* pindexNewForkTip)
 {
     AssertLockHeld(cs_main);
     // If we are on a fork that is sufficiently large, set a warning flag
-    CBlockIndex* pfork = pindexNewForkTip;//最后一个连接的
+    CBlockIndex* pfork = pindexNewForkTip;//最后一个组中，最小的一个块，可能部分已经加进去了，所以比 plonger 小
     CBlockIndex* plonger = chainActive.Tip();//顶部
-    while (pfork && pfork != plonger)
+    while (pfork && pfork != plonger) //最后添加的，和顶部找到中间相同的
     {
         while (plonger && plonger->nHeight > pfork->nHeight)
             plonger = plonger->pprev;
@@ -1402,8 +1402,8 @@ void CheckForkWarningConditionsOnNewFork(CBlockIndex* pindexNewForkTip)
             pindexNewForkTip->nChainWork - pfork->nChainWork > (GetBlockProof(*pfork) * 7) &&
             chainActive.Height() - pindexNewForkTip->nHeight < 72)
     {
-        pindexBestForkTip = pindexNewForkTip;
-        pindexBestForkBase = pfork;
+        pindexBestForkTip = pindexNewForkTip;//最后分叉的顶部
+        pindexBestForkBase = pfork;//最后添加的分叉块
     }
 
     CheckForkWarningConditions();
@@ -1412,18 +1412,18 @@ void CheckForkWarningConditionsOnNewFork(CBlockIndex* pindexNewForkTip)
 void static InvalidChainFound(CBlockIndex* pindexNew)
 {
     if (!pindexBestInvalid || pindexNew->nChainWork > pindexBestInvalid->nChainWork)
-        pindexBestInvalid = pindexNew;
+        pindexBestInvalid = pindexNew;//最后一个无效的
 
     LogPrintf("%s: invalid block=%s  height=%d  log2_work=%.8g  date=%s\n", __func__,
       pindexNew->GetBlockHash().ToString(), pindexNew->nHeight,
       log(pindexNew->nChainWork.getdouble())/log(2.0), DateTimeStrFormat("%Y-%m-%d %H:%M:%S",
       pindexNew->GetBlockTime()));
-    CBlockIndex *tip = chainActive.Tip();
+    CBlockIndex *tip = chainActive.Tip();//顶部
     assert (tip);
     LogPrintf("%s:  current best=%s  height=%d  log2_work=%.8g  date=%s\n", __func__,
       tip->GetBlockHash().ToString(), chainActive.Height(), log(tip->nChainWork.getdouble())/log(2.0),
       DateTimeStrFormat("%Y-%m-%d %H:%M:%S", tip->GetBlockTime()));
-    CheckForkWarningConditions();
+    CheckForkWarningConditions();//检查
 }
 
 void static InvalidBlockFound(CBlockIndex *pindex, const CValidationState &state) {
@@ -1521,7 +1521,7 @@ bool CheckInputs(const CTransaction& tx, CValidationState &state, const CCoinsVi
 {
     if (!tx.IsCoinBase())
     {
-        if (!Consensus::CheckTxInputs(tx, state, inputs, GetSpendHeight(inputs)))
+        if (!Consensus::CheckTxInputs(tx, state, inputs, GetSpendHeight(inputs)))//检查 input 钱合法，并且没有交易
             return false;
 
         if (pvChecks)
@@ -1963,6 +1963,7 @@ static int64_t nTimeTotal = 0;
 /** Apply the effects of this block (with given index) on the UTXO set represented by coins.
  *  Validity checks that depend on the UTXO set are also done; ConnectBlock()
  *  can fail if those validity checks fail (among other reasons). */
+//连接块到链中
 static bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pindex, CCoinsViewCache& view, bool fJustCheck = false)
 {
     const CChainParams& chainparams = Params();
@@ -1971,15 +1972,17 @@ static bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockInd
     int64_t nTimeStart = GetTimeMicros();
 
     // Check it again in case a previous version let a bad block in
+    //检查块
     if (!CheckBlock(block, state, !fJustCheck, !fJustCheck))
         return false;
 
     // verify that the view's current state corresponds to the previous block
+    //检查当前块之前是view中的顶部
     uint256 hashPrevBlock = pindex->pprev == NULL ? uint256() : pindex->pprev->GetBlockHash();
     assert(hashPrevBlock == view.GetBestBlock());
 
     // Special case for the genesis block, skipping connection of its transactions
-    // (its coinbase is unspendable)
+    // (its coinbase is unspendable) 旷世区块
     if (block.GetHash() == chainparams.GetConsensus().hashGenesisBlock) {
         if (!fJustCheck)
             view.SetBestBlock(pindex->GetBlockHash());
@@ -1987,7 +1990,7 @@ static bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockInd
     }
 
     bool fScriptChecks = true;
-    if (!hashAssumeValid.IsNull()) {
+    if (!hashAssumeValid.IsNull()) {//最后一个检查的块，系统设置好的 
         // We've been configured with the hash of a block which has been externally verified to have a valid history.
         // A suitable default value is included with the software and updated from time to time.  Because validity
         //  relative to a piece of software is an objective fact these defaults can be easily reviewed.
@@ -2007,11 +2010,12 @@ static bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockInd
                 //  artificially set the default assumed verified block further back.
                 // The test against nMinimumChainWork prevents the skipping when denied access to any chain at
                 //  least as good as the expected chain.
+                //  在有效块之前，要检查签名
                 fScriptChecks = (GetBlockProofEquivalentTime(*pindexBestHeader, *pindex, *pindexBestHeader, chainparams.GetConsensus()) <= 60 * 60 * 24 * 7 * 2);
             }
         }
     }
-
+    //一大堆检查，没看懂
     int64_t nTime1 = GetTimeMicros(); nTimeCheck += nTime1 - nTimeStart;
     LogPrint("bench", "    - Sanity checks: %.2fms [%.2fs]\n", 0.001 * (nTime1 - nTimeStart), nTimeCheck * 0.000001);
 
@@ -2044,7 +2048,7 @@ static bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockInd
     if (fEnforceBIP30) {
         BOOST_FOREACH(const CTransaction& tx, block.vtx) {
             for (size_t o = 0; o < tx.vout.size(); o++) {
-                if (view.HaveCoin(COutPoint(tx.GetHash(), o))) {
+                if (view.HaveCoin(COutPoint(tx.GetHash(), o))) {//如果已经存在一个交易，就退出了
                     return state.DoS(100, error("ConnectBlock(): tried to overwrite transaction"),
                                      REJECT_INVALID, "bad-txns-BIP30");
                 }
@@ -2079,10 +2083,10 @@ static bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockInd
 
     int64_t nTime2 = GetTimeMicros(); nTimeForks += nTime2 - nTime1;
     LogPrint("bench", "    - Fork checks: %.2fms [%.2fs]\n", 0.001 * (nTime2 - nTime1), nTimeForks * 0.000001);
-
+    //一大堆检查，没看懂
     CBlockUndo blockundo;
 
-    CCheckQueueControl<CScriptCheck> control(fScriptChecks && nScriptCheckThreads ? &scriptcheckqueue : NULL);
+    CCheckQueueControl<CScriptCheck> control(fScriptChecks && nScriptCheckThreads ? &scriptcheckqueue : NULL);//签名检查
 
     std::vector<int> prevheights;
     CAmount nFees = 0;
@@ -2105,24 +2109,24 @@ static bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockInd
 
         nInputs += tx.vin.size();
         nSigOps += GetLegacySigOpCount(tx);
-        if (nSigOps > MaxBlockSigOps(fDIP0001Active_context))
+        if (nSigOps > MaxBlockSigOps(fDIP0001Active_context))//签名个数太多了
             return state.DoS(100, error("ConnectBlock(): too many sigops"),
                              REJECT_INVALID, "bad-blk-sigops");
 
         if (!tx.IsCoinBase())
         {
-            if (!view.HaveInputs(tx))
+            if (!view.HaveInputs(tx))//查找input的out是否存在
                 return state.DoS(100, error("ConnectBlock(): inputs missing/spent"),
                                  REJECT_INVALID, "bad-txns-inputs-missingorspent");
 
             // Check that transaction is BIP68 final
             // BIP68 lock checks (as opposed to nLockTime checks) must
             // be in ConnectBlock because they require the UTXO set
-            prevheights.resize(tx.vin.size());
+            prevheights.resize(tx.vin.size());//入的前一个的高度列表
             for (size_t j = 0; j < tx.vin.size(); j++) {
                 prevheights[j] = view.AccessCoin(tx.vin[j].prevout).nHeight;
             }
-
+            // 检查 交易的锁定时间
             if (!SequenceLocks(tx, nLockTimeFlags, &prevheights, *pindex)) {
                 return state.DoS(100, error("%s: contains a non-BIP68-final transaction", __func__),
                                  REJECT_INVALID, "bad-txns-nonfinal");
@@ -2183,7 +2187,7 @@ static bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockInd
             if (!CheckInputs(tx, state, view, fScriptChecks, flags, fCacheResults, nScriptCheckThreads ? &vChecks : NULL))
                 return error("ConnectBlock(): CheckInputs on %s failed with %s",
                     tx.GetHash().ToString(), FormatStateMessage(state));
-            control.Add(vChecks);
+            control.Add(vChecks);//这个地方检查交易的合法性
         }
 
         if (fAddressIndex) {
@@ -2218,7 +2222,7 @@ static bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockInd
         CTxUndo undoDummy;
         if (i > 0) {
             blockundo.vtxundo.push_back(CTxUndo());
-        }
+        }//第几个交易消费了，更新消费状态，并且加入新的coin
         UpdateCoins(tx, state, view, i == 0 ? undoDummy : blockundo.vtxundo.back(), pindex->nHeight);
 
         vPos.push_back(std::make_pair(tx.GetHash(), pos));
@@ -2237,10 +2241,11 @@ static bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockInd
     // TODO: resync data (both ways?) and try to reprocess this block later.
     CAmount blockReward = nFees + GetBlockSubsidy(pindex->pprev->nBits, pindex->pprev->nHeight, chainparams.GetConsensus());
     std::string strError = "";
+    //主节点 检查挖矿总奖励是否合法
     if (!IsBlockValueValid(block, pindex->nHeight, blockReward, strError)) {
         return state.DoS(0, error("ConnectBlock(DASH): %s", strError), REJECT_INVALID, "bad-cb-amount");
     }
-
+    //主节点 检查奖励分配是否合法
     if (!IsBlockPayeeValid(block.vtx[0], pindex->nHeight, blockReward)) {
         mapRejectedBlocks.insert(make_pair(block.GetHash(), GetTime()));
         return state.DoS(0, error("ConnectBlock(DASH): couldn't find masternode or superblock payments"),
@@ -2248,7 +2253,7 @@ static bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockInd
     }
     // END DASH
 
-    if (!control.Wait())
+    if (!control.Wait())//等待交易签名检查完成
         return state.DoS(100, false);
     int64_t nTime4 = GetTimeMicros(); nTimeVerify += nTime4 - nTime2;
     LogPrint("bench", "    - Verify %u txins: %.2fms (%.3fms/txin) [%.2fs]\n", nInputs - 1, 0.001 * (nTime4 - nTime2), nInputs <= 1 ? 0 : 0.001 * (nTime4 - nTime2) / (nInputs-1), nTimeVerify * 0.000001);
@@ -2257,7 +2262,7 @@ static bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockInd
         return true;
 
     // Write undo information to disk
-    if (pindex->GetUndoPos().IsNull() || !pindex->IsValid(BLOCK_VALID_SCRIPTS))
+    if (pindex->GetUndoPos().IsNull() || !pindex->IsValid(BLOCK_VALID_SCRIPTS))//签名不合法
     {
         if (pindex->GetUndoPos().IsNull()) {
             CDiskBlockPos pos;
@@ -2304,7 +2309,7 @@ static bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockInd
     LogPrint("bench", "    - Index writing: %.2fms [%.2fs]\n", 0.001 * (nTime5 - nTime4), nTimeIndex * 0.000001);
 
     // Watch for changes to the previous coinbase transaction.
-    static uint256 hashPrevBestCoinBase;
+    static uint256 hashPrevBestCoinBase; //更新
     GetMainSignals().UpdatedTransaction(hashPrevBestCoinBase);
     hashPrevBestCoinBase = block.vtx[0].GetHash();
 
@@ -2436,7 +2441,7 @@ void static UpdateTip(CBlockIndex *pindexNew) {
     const CChainParams& chainParams = Params();
     chainActive.SetTip(pindexNew);
 
-    // New best block
+    // New best block 接受到新块了
     mempool.AddTransactionsUpdated(1);
 
     LogPrintf("%s: new best=%s  height=%d  log2_work=%.8g  tx=%lu  date=%s progress=%f  cache=%.1fMiB(%utxo)\n", __func__,
@@ -2550,12 +2555,14 @@ static int64_t nTimePostConnect = 0;
  * Connect a new block to chainActive. pblock is either NULL or a pointer to a CBlock
  * corresponding to pindexNew, to bypass loading it again from disk.
  */
+//块链顶部添加块
 bool static ConnectTip(CValidationState& state, const CChainParams& chainparams, CBlockIndex* pindexNew, const CBlock* pblock)
 {
     assert(pindexNew->pprev == chainActive.Tip());
     // Read block from disk.
     int64_t nTime1 = GetTimeMicros();
     CBlock block;
+    //读块数据
     if (!pblock) {
         if (!ReadBlockFromDisk(block, pindexNew, chainparams.GetConsensus()))
             return AbortNode(state, "Failed to read block");
@@ -2568,6 +2575,7 @@ bool static ConnectTip(CValidationState& state, const CChainParams& chainparams,
     {
         CCoinsViewCache view(pcoinsTip);
         bool rv = ConnectBlock(*pblock, state, pindexNew, view);
+        //通知所有人，检查块数据
         GetMainSignals().BlockChecked(*pblock, state);
         if (!rv) {
             if (state.IsInvalid())
@@ -2587,15 +2595,20 @@ bool static ConnectTip(CValidationState& state, const CChainParams& chainparams,
     LogPrint("bench", "  - Writing chainstate: %.2fms [%.2fs]\n", (nTime5 - nTime4) * 0.001, nTimeChainState * 0.000001);
     // Remove conflicting transactions from the mempool.
     list<CTransaction> txConflicted;
+    //删除接受到交易
     mempool.removeForBlock(pblock->vtx, pindexNew->nHeight, txConflicted, !IsInitialBlockDownload());
     // Update chainActive & related variables.
     UpdateTip(pindexNew);
     // Tell wallet about transactions that went from mempool
     // to conflicted:
+    // 接受到块后，某些交易已经加到块中了，也就是可能消费了，所以需要刷新钱包    
+    //通知 刷新接受到，交易池中存在的交易，一般都是钱包响应
     BOOST_FOREACH(const CTransaction &tx, txConflicted) {
         GetMainSignals().SyncTransaction(tx, NULL);
     }
     // ... and about transactions that got confirmed:
+    //通知刷新本块交易，一般都是钱包响应
+    // 接受到块有，可能钱包增加了交易，也就是别人给自己了，所以需要刷新钱包
     BOOST_FOREACH(const CTransaction &tx, pblock->vtx) {
         GetMainSignals().SyncTransaction(tx, pblock);
     }
@@ -2745,26 +2758,27 @@ static bool ActivateBestChainStep(CValidationState& state, const CChainParams& c
     // Build list of new blocks to connect.
     std::vector<CBlockIndex*> vpindexToConnect;//需要连接的块
     bool fContinue = true;
-    int nHeight = pindexFork ? pindexFork->nHeight : -1;
+    int nHeight = pindexFork ? pindexFork->nHeight : -1;//分叉的位置
     while (fContinue && nHeight != pindexMostWork->nHeight) {
         // Don't iterate the entire list of potential improvements toward the best tip, as we likely only need
         // a few blocks along the way.
-        int nTargetHeight = std::min(nHeight + 32, pindexMostWork->nHeight);//最多32分叉
+        int nTargetHeight = std::min(nHeight + 32, pindexMostWork->nHeight);//每次最多玩32个块
         vpindexToConnect.clear();
         vpindexToConnect.reserve(nTargetHeight - nHeight);
-        CBlockIndex *pindexIter = pindexMostWork->GetAncestor(nTargetHeight);
-        while (pindexIter && pindexIter->nHeight != nHeight) {//从最好块中找到所有的
-            vpindexToConnect.push_back(pindexIter);
+        CBlockIndex *pindexIter = pindexMostWork->GetAncestor(nTargetHeight);//找到这个高度的块
+        while (pindexIter && pindexIter->nHeight != nHeight) {//把找到高度之前的所有块都链进来 nTargetHeight 这个是目标
+            vpindexToConnect.push_back(pindexIter);//小块在后面
             pindexIter = pindexIter->pprev;
         }
         nHeight = nTargetHeight;
 
         // Connect new blocks.
+        //反向循环，先加小的
         BOOST_REVERSE_FOREACH(CBlockIndex *pindexConnect, vpindexToConnect) {//重新连接所有块
             if (!ConnectTip(state, chainparams, pindexConnect, pindexConnect == pindexMostWork ? pblock : NULL)) {
                 if (state.IsInvalid()) {
                     // The block violates a consensus rule.
-                    if (!state.CorruptionPossible())
+                    if (!state.CorruptionPossible())//赋值最优一个坏的块
                         InvalidChainFound(vpindexToConnect.back());//通知失败块
                     state = CValidationState();
                     fInvalidFound = true;
@@ -3595,6 +3609,10 @@ static bool IsSuperMajority(int minVersion, const CBlockIndex* pstart, unsigned 
 //  ActivateBestChain 防止分叉
 //   ActivateBestChainStep 根据算力最大的作为新链
 //   {
+//         ConnectBlock
+//        {
+ //           control.Add(vChecks) 检查交易的合法性
+ //       }
 //       通知界面，tip 发生变化
 //       通知所有数据中心，tip发生变化
  //    }     
