@@ -64,6 +64,13 @@ bool CCoinsViewCache::GetCoin(const COutPoint &outpoint, Coin &coin) const {
     return false;
 }
 
+bool CCoinsViewCache::IsSpent(const COutPoint &outpoint) const {
+    CCoinsMap::const_iterator it = FetchCoin(outpoint);
+    if (it != cacheCoins.end()) {
+        return !it->second.coin.IsSpent();
+    }
+    return false;
+}
 void CCoinsViewCache::AddCoin(const COutPoint &outpoint, Coin&& coin, bool possible_overwrite) {
     assert(!coin.IsSpent());
     if (coin.out.scriptPubKey.IsUnspendable()) return;

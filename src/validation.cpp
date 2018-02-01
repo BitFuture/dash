@@ -499,7 +499,7 @@ bool CheckTransaction(const CTransaction& tx, CValidationState &state)
     }
 
     // Check for duplicate inputs
-    // 输入不能重复，
+    // 输入不能重复，双花之一
     set<COutPoint> vInOutPoints;
     BOOST_FOREACH(const CTxIn& txin, tx.vin)
     {
@@ -615,13 +615,13 @@ bool AcceptToMemoryPoolWorker(CTxMemPool& pool, CValidationState &state, const C
     // Check for conflicts with in-memory transactions
     set<uint256> setConflicts;
     {
-    LOCK(pool.cs); // protect pool.mapNextTx
+    LOCK(pool.cs); // protect pool.mapNextTx   就是上一个输出，可能作为两个一个输入了，双花
     BOOST_FOREACH(const CTxIn &txin, tx.vin)
     {
-        if (pool.mapNextTx.count(txin.prevout))
+        if (pool.mapNextTx.count(txin.prevout))//已经有交易用到这个输出了
         {
             const CTransaction *ptxConflicting = pool.mapNextTx[txin.prevout].ptx;
-            if (!setConflicts.count(ptxConflicting->GetHash()))
+            if (!setConflicts.count(ptxConflicting->GetHash()))//加入冲突列表
             {
                 // InstantSend txes are not replacable
                 if(instantsend.HasTxLockRequest(ptxConflicting->GetHash())) {
@@ -650,7 +650,7 @@ bool AcceptToMemoryPoolWorker(CTxMemPool& pool, CValidationState &state, const C
                 bool fReplacementOptOut = true;
                 if (fEnableReplacement)
                 {
-                    BOOST_FOREACH(const CTxIn &txin, ptxConflicting->vin)
+                    BOOST_FOREACH(const CTxIn &txin, ptxConflicting->vin)//输入的in
                     {
                         if (txin.nSequence < std::numeric_limits<unsigned int>::max()-1)
                         {
@@ -684,8 +684,8 @@ bool AcceptToMemoryPoolWorker(CTxMemPool& pool, CValidationState &state, const C
             COutPoint outpoint(hash, out);
             bool had_coin_in_cache = pcoinsTip->HaveCoinInCache(outpoint);
             if (view.HaveCoin(outpoint)) {
-                if (!had_coin_in_cache) {
-                    coins_to_uncache.push_back(outpoint);
+                if (!had_coin_in_cache) {//没有，或者已经花了，所以要清除
+                    coins_to_uncache.push_back(outpoint);//退出这个函数，会处理 coins_to_uncache
                 }
                 return state.Invalid(false, REJECT_ALREADY_KNOWN, "txn-already-known");
             }
@@ -693,11 +693,11 @@ bool AcceptToMemoryPoolWorker(CTxMemPool& pool, CValidationState &state, const C
 
         // do all inputs exist?
         BOOST_FOREACH(const CTxIn txin, tx.vin) {
-            if (!pcoinsTip->HaveCoinInCache(txin.prevout)) {
-                coins_to_uncache.push_back(txin.prevout);
+            if (!pcoinsTip->HaveCoinInCache(txin.prevout)) {//没有，或者已经花了，所以要清除
+                coins_to_uncache.push_back(txin.prevout);//
             }
-            if (!view.HaveCoin(txin.prevout)) {
-                if (pfMissingInputs) {
+            if (!view.HaveCoin(txin.prevout)) {//没有输入，或者已经花了 直接退出 孤儿
+                if (pfMissingInputs && !view.IsSpent(txin.prevout)) { ///swx 已经用过了，直接拒绝,否则加入孤儿池增加负担
                     *pfMissingInputs = true;
                 }
                 return false; // fMissingInputs and !state.IsInvalid() is used to detect this condition, don't set state.Invalid()
@@ -734,14 +734,14 @@ bool AcceptToMemoryPoolWorker(CTxMemPool& pool, CValidationState &state, const C
         // nModifiedFees includes any fee deltas from PrioritiseTransaction
         CAmount nModifiedFees = nFees;
         double nPriorityDummy = 0;
-        pool.ApplyDeltas(hash, nPriorityDummy, nModifiedFees);
+        pool.ApplyDeltas(hash, nPriorityDummy, nModifiedFees);//挖矿要用，记录在另外一个列表中
 
         CAmount inChainInputValue;
         double dPriority = view.GetPriority(tx, chainActive.Height(), inChainInputValue);
 
         // Keep track of transactions that spend a coinbase, which we re-scan
         // during reorgs to ensure COINBASE_MATURITY is still met.
-        bool fSpendsCoinbase = false;
+        bool fSpendsCoinbase = false; //是否消费挖矿奖励
         BOOST_FOREACH(const CTxIn &txin, tx.vin) {
             const Coin &coin = view.AccessCoin(txin.prevout);
             if (coin.IsCoinBase()) {
@@ -757,11 +757,11 @@ bool AcceptToMemoryPoolWorker(CTxMemPool& pool, CValidationState &state, const C
         // sigops, making it impossible to mine. Since the coinbase transaction
         // itself can contain sigops MAX_STANDARD_TX_SIGOPS is less than
         // MAX_BLOCK_SIGOPS; we still consider this an invalid rather than
-        // merely non-standard transaction.
+        // merely non-standard transaction. 检查签名个数
         if ((nSigOps > MAX_STANDARD_TX_SIGOPS) || (nBytesPerSigOp && nSigOps > nSize / nBytesPerSigOp))
             return state.DoS(0, false, REJECT_NONSTANDARD, "bad-txns-too-many-sigops", false,
                 strprintf("%d", nSigOps));
-
+        //检查费用
         CAmount mempoolRejectFee = pool.GetMinFee(GetArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000).GetFee(nSize);
         if (mempoolRejectFee > 0 && nModifiedFees < mempoolRejectFee) {
             return state.DoS(0, false, REJECT_INSUFFICIENTFEE, "mempool min fee not met", false, strprintf("%d < %d", nFees, mempoolRejectFee));
@@ -804,7 +804,7 @@ bool AcceptToMemoryPoolWorker(CTxMemPool& pool, CValidationState &state, const C
         size_t nLimitAncestorSize = GetArg("-limitancestorsize", DEFAULT_ANCESTOR_SIZE_LIMIT)*1000;
         size_t nLimitDescendants = GetArg("-limitdescendantcount", DEFAULT_DESCENDANT_LIMIT);
         size_t nLimitDescendantSize = GetArg("-limitdescendantsize", DEFAULT_DESCENDANT_SIZE_LIMIT)*1000;
-        std::string errString;
+        std::string errString; //计算祖先 找到所有交易的祖先
         if (!pool.CalculateMemPoolAncestors(entry, setAncestors, nLimitAncestors, nLimitAncestorSize, nLimitDescendants, nLimitDescendantSize, errString)) {
             return state.DoS(0, false, REJECT_NONSTANDARD, "too-long-mempool-chain", false, errString);
         }
@@ -835,7 +835,7 @@ bool AcceptToMemoryPoolWorker(CTxMemPool& pool, CValidationState &state, const C
         // If we don't hold the lock allConflicting might be incomplete; the
         // subsequent RemoveStaged() and addUnchecked() calls don't guarantee
         // mempool consistency for us.
-        LOCK(pool.cs);
+        LOCK(pool.cs); //检查冲突
         if (setConflicts.size())
         {
             CFeeRate newFeeRate(nModifiedFees, nSize);
@@ -1035,7 +1035,7 @@ bool AcceptToMemoryPool(CTxMemPool& pool, CValidationState &state, const CTransa
             pcoinsTip->Uncache(hashTx);
     }
     // After we've (potentially) uncached entries, ensure our coins cache is still within its size limits
-    CValidationState stateDummy;
+    CValidationState stateDummy;//刷新存盘
     FlushStateToDisk(stateDummy, FLUSH_STATE_PERIODIC);
     return res;
 }
@@ -3546,6 +3546,10 @@ static bool IsSuperMajority(int minVersion, const CBlockIndex* pstart, unsigned 
     }
     return (nFound >= nRequired);
 }
+//关于双花
+//在接受到交易的时候， 会判断当前交易池是否有冲突，然后判断本交易所有in的父亲是否用过
+//如果接收有冲突 CalculateMemPoolAncestors 也会处理
+//接受到块的时候，会在connectblock中找 pcointip中判断是否用过。
 
 //挖矿和网络上接受到块数据都走到这里
 //挖矿 通过这个 走过来的 ProcessBlockFound 
