@@ -59,10 +59,10 @@ using namespace std;
  * Global state
  */
 
-CCriticalSection cs_main;
+CCriticalSection cs_main;//总锁
 
 BlockMap mapBlockIndex;//所有块头部
-CChain chainActive;
+CChain chainActive;//当前链
 CBlockIndex *pindexBestHeader = NULL;//最后接受到的块的头部
 CWaitableCriticalSection csBestBlock;
 CConditionVariable cvBlockChange;
@@ -139,13 +139,13 @@ namespace {
      * as good as our current tip or better. Entries may be failed, though, and pruning nodes may be
      * missing the data for the block.
      */     
-    set<CBlockIndex*, CBlockIndexWorkComparator> setBlockIndexCandidates;
+    set<CBlockIndex*, CBlockIndexWorkComparator> setBlockIndexCandidates;//接受到的块头部，根据工作量排序
     /** All pairs A->B, where A (or one of its ancestors) misses transactions, but B has transactions.
      * Pruned nodes may have entries where B is missing data.
      */
     //收到块信息，可能不是连续的，高的块先到，先保存在这里，类私孤儿块，当前面的块到了的时候，再处理这个块，
     //块接受不一定是先低后高，也不一定从一个连接得到。
-    multimap<CBlockIndex*, CBlockIndex*> mapBlocksUnlinked;
+    multimap<CBlockIndex*, CBlockIndex*> mapBlocksUnlinked;//孤儿块
 
     CCriticalSection cs_LastBlockFile;
     std::vector<CBlockFileInfo> vinfoBlockFile;
@@ -170,7 +170,8 @@ namespace {
     /** Dirty block file entries. */
     set<int> setDirtyFileInfo;
 } // anon namespace
-
+//找到链中最近的分叉，不一定准确，因为 locator 也不是按顺序存储的 
+//locator 保存某个块头，一直往前，隔几个的块头的 hash 
 CBlockIndex* FindForkInGlobalIndex(const CChain& chain, const CBlockLocator& locator)
 {
     // Find the first block the caller has in the main chain
@@ -186,9 +187,9 @@ CBlockIndex* FindForkInGlobalIndex(const CChain& chain, const CBlockLocator& loc
     return chain.Genesis();
 }
 
-CCoinsViewDB *pcoinsdbview = NULL;  //数据库中没有消费的记录  VerifyDB 中读数据库的时候填充
+CCoinsViewDB    *pcoinsdbview = NULL;  //数据库中没有消费的记录  VerifyDB 中读数据库的时候填充
 CCoinsViewCache *pcoinsTip = NULL;  //内存中没有消费的记录  pcoinsTip 依赖 pcoinsdbview ConnectBlock 的时候填充
-CBlockTreeDB *pblocktree = NULL;    //这个类是用来向/blocks/index/*下面的文件进行读写操作
+CBlockTreeDB    *pblocktree = NULL;    //这个类是用来向/blocks/index/*下面的文件进行读写操作
 
 enum FlushStateMode {
     FLUSH_STATE_NONE,
@@ -199,20 +200,20 @@ enum FlushStateMode {
 
 // See definition for documentation
 bool static FlushStateToDisk(CValidationState &state, FlushStateMode mode);
-
+//交易是否锁定
 bool IsFinalTx(const CTransaction &tx, int nBlockHeight, int64_t nBlockTime)
 {
     if (tx.nLockTime == 0)
         return true;
     if ((int64_t)tx.nLockTime < ((int64_t)tx.nLockTime < LOCKTIME_THRESHOLD ? (int64_t)nBlockHeight : nBlockTime))
         return true;
-    BOOST_FOREACH(const CTxIn& txin, tx.vin) {
+    BOOST_FOREACH(const CTxIn& txin, tx.vin) {//如果 所有交易都 SEQUENCE_FINAL，则不考虑交易锁定时间
         if (!(txin.nSequence == CTxIn::SEQUENCE_FINAL))
             return false;
     }
     return true;
 }
-
+//检查是不是锁定交易
 bool CheckFinalTx(const CTransaction &tx, int flags)
 {
     AssertLockHeld(cs_main);
@@ -223,7 +224,7 @@ bool CheckFinalTx(const CTransaction &tx, int flags)
     // rules would be enforced for the next block and setting the
     // appropriate flags. At the present time no soft-forks are
     // scheduled, so no flags are set.
-    flags = std::max(flags, 0);
+    flags = std::max(flags, 0); //标志
 
     // CheckFinalTx() uses chainActive.Height()+1 to evaluate
     // nLockTime because when IsFinalTx() is called within
@@ -238,7 +239,7 @@ bool CheckFinalTx(const CTransaction &tx, int flags)
     // When the next block is created its previous block will be the current
     // chain tip, so we use that to calculate the median time passed to
     // IsFinalTx() if LOCKTIME_MEDIAN_TIME_PAST is set.
-    const int64_t nBlockTime = (flags & LOCKTIME_MEDIAN_TIME_PAST)
+    const int64_t nBlockTime = (flags & LOCKTIME_MEDIAN_TIME_PAST)//中间时间还是当前时间
                              ? chainActive.Tip()->GetMedianTimePast()
                              : GetAdjustedTime();
 
@@ -250,7 +251,7 @@ bool CheckFinalTx(const CTransaction &tx, int flags)
  * which the transaction will be considered final in the context of BIP 68.
  * Also removes from the vector of input heights any entries which did not
  * correspond to sequence locked inputs as they do not affect the calculation.
- */
+ *///计算交易中所有in的锁定时间
 static std::pair<int, int64_t> CalculateSequenceLocks(const CTransaction &tx, int flags, std::vector<int>* prevHeights, const CBlockIndex& block)
 {
     assert(prevHeights->size() == tx.vin.size());
@@ -267,7 +268,7 @@ static std::pair<int, int64_t> CalculateSequenceLocks(const CTransaction &tx, in
     // we would be doing a signed comparison and half the range of nVersion
     // wouldn't support BIP 68.
     bool fEnforceBIP68 = static_cast<uint32_t>(tx.nVersion) >= 2
-                      && flags & LOCKTIME_VERIFY_SEQUENCE;
+                      && (flags & LOCKTIME_VERIFY_SEQUENCE);
 
     // Do not enforce sequence numbers as a relative lock time
     // unless we have been instructed to
@@ -312,7 +313,7 @@ static std::pair<int, int64_t> CalculateSequenceLocks(const CTransaction &tx, in
 
     return std::make_pair(nMinHeight, nMinTime);
 }
-
+//比较交易锁定
 static bool EvaluateSequenceLocks(const CBlockIndex& block, std::pair<int, int64_t> lockPair)
 {
     assert(block.pprev);
@@ -322,7 +323,7 @@ static bool EvaluateSequenceLocks(const CBlockIndex& block, std::pair<int, int64
 
     return true;
 }
-
+//计算交易锁定
 bool SequenceLocks(const CTransaction &tx, int flags, std::vector<int>* prevHeights, const CBlockIndex& block)
 {
     return EvaluateSequenceLocks(block, CalculateSequenceLocks(tx, flags, prevHeights, block));
@@ -345,7 +346,7 @@ bool TestLockPointValidity(const LockPoints* lp)
     // LockPoints still valid
     return true;
 }
-
+//检查交易锁定
 bool CheckSequenceLocks(const CTransaction &tx, int flags, LockPoints* lp, bool useExistingLockPoints)
 {
     AssertLockHeld(cs_main);
@@ -416,7 +417,7 @@ bool CheckSequenceLocks(const CTransaction &tx, int flags, LockPoints* lp, bool 
     return EvaluateSequenceLocks(index, lockPair);
 }
 
-
+//计算输入签名总数
 unsigned int GetLegacySigOpCount(const CTransaction& tx)
 {
     unsigned int nSigOps = 0;
@@ -430,7 +431,7 @@ unsigned int GetLegacySigOpCount(const CTransaction& tx)
     }
     return nSigOps;
 }
-
+//计算 P2SH 签名总数 多重签名的简化地址
 unsigned int GetP2SHSigOpCount(const CTransaction& tx, const CCoinsViewCache& inputs)
 {
     if (tx.IsCoinBase())
@@ -447,7 +448,7 @@ unsigned int GetP2SHSigOpCount(const CTransaction& tx, const CCoinsViewCache& in
     }
     return nSigOps;
 }
-
+//根据 outpoint 取得未交易的
 bool GetUTXOCoin(const COutPoint& outpoint, Coin& coin)
 {
     LOCK(cs_main);
@@ -473,7 +474,7 @@ int GetUTXOConfirmations(const COutPoint& outpoint)
     return (nPrevoutHeight > -1 && chainActive.Tip()) ? chainActive.Height() - nPrevoutHeight + 1 : -1;
 }
 
-
+//检查 交易合法性
 bool CheckTransaction(const CTransaction& tx, CValidationState &state)
 {
     // Basic checks that don't depend on any context
@@ -533,7 +534,7 @@ bool ContextualCheckTransaction(const CTransaction& tx, CValidationState &state,
 
     return true;
 }
-
+//当交易池太大，删除一部分待处理交易，这就丢交易了
 void LimitMempoolSize(CTxMemPool& pool, size_t limit, unsigned long age) {
     int expired = pool.Expire(GetTime() - age);
     if (expired != 0)
@@ -553,7 +554,7 @@ std::string FormatStateMessage(const CValidationState &state)
         state.GetDebugMessage().empty() ? "" : ", "+state.GetDebugMessage(),
         state.GetRejectCode());
 }
-
+//接收交易并加入交易池
 bool AcceptToMemoryPoolWorker(CTxMemPool& pool, CValidationState &state, const CTransaction &tx, bool fLimitFree,
                               bool* pfMissingInputs, bool fOverrideMempoolLimit, bool fRejectAbsurdFee,
                               std::vector<COutPoint>& coins_to_uncache, bool fDryRun)
@@ -716,7 +717,7 @@ bool AcceptToMemoryPoolWorker(CTxMemPool& pool, CValidationState &state, const C
         // block; we don't want our mempool filled up with transactions that can't
         // be mined yet.
         // Must keep pool.cs for this unless we change CheckSequenceLocks to take a
-        // CoinsViewCache instead of create its own
+        // CoinsViewCache instead of create its own  检查锁定时间
         if (!CheckSequenceLocks(tx, STANDARD_LOCKTIME_VERIFY_FLAGS, &lp))
             return state.DoS(0, false, REJECT_NONSTANDARD, "non-BIP68-final");
         }
@@ -1023,7 +1024,7 @@ bool AcceptToMemoryPoolWorker(CTxMemPool& pool, CValidationState &state, const C
 
     return true;
 }
-
+//接受交易并存盘
 bool AcceptToMemoryPool(CTxMemPool& pool, CValidationState &state, const CTransaction &tx, bool fLimitFree,
                         bool* pfMissingInputs, bool fOverrideMempoolLimit, bool fRejectAbsurdFee, bool fDryRun)
 {
@@ -1090,6 +1091,10 @@ bool GetAddressUnspent(uint160 addressHash, int type,
 }
 
 /** Return transaction in tx, and if it was found inside a block, its hash is placed in hashBlock */
+//根据 hash 取得 txOut
+//如果交易池有，直接返回
+//如果记录了交易索引，直接读交易索引文件
+//如果钱没花，找块索引，读块文件，找记录，慢
 bool GetTransaction(const uint256 &hash, CTransaction &txOut, const Consensus::Params& consensusParams, uint256 &hashBlock, bool fAllowSlow)
 {
     CBlockIndex *pindexSlow = NULL;
@@ -1146,16 +1151,11 @@ bool GetTransaction(const uint256 &hash, CTransaction &txOut, const Consensus::P
     return false;
 }
 
-
-
-
-
-
 //////////////////////////////////////////////////////////////////////////////
 //
 // CBlock and CBlockIndex
 //
-
+//写块
 bool WriteBlockToDisk(const CBlock& block, CDiskBlockPos& pos, const CMessageHeader::MessageStartChars& messageStart)
 {
     // Open history file to append
@@ -1176,7 +1176,7 @@ bool WriteBlockToDisk(const CBlock& block, CDiskBlockPos& pos, const CMessageHea
 
     return true;
 }
-
+//读块
 bool ReadBlockFromDisk(CBlock& block, const CDiskBlockPos& pos, const Consensus::Params& consensusParams)
 {
     block.SetNull();
@@ -1210,7 +1210,7 @@ bool ReadBlockFromDisk(CBlock& block, const CBlockIndex* pindex, const Consensus
                 pindex->ToString(), pindex->GetBlockPos().ToString());
     return true;
 }
-
+//根据难度计算浮点，下面函数用
 double ConvertBitsToDouble(unsigned int nBits)
 {
     int nShift = (nBits >> 24) & 0xff;
@@ -1235,7 +1235,7 @@ double ConvertBitsToDouble(unsigned int nBits)
 NOTE:   unlike bitcoin we are using PREVIOUS block height here,
         might be a good idea to change this to use prev bits
         but current height to avoid confusion.
-*/
+*///根据  nPrevBits nPrevHeight 计算挖矿奖励
 CAmount GetBlockSubsidy(int nPrevBits, int nPrevHeight, const Consensus::Params& consensusParams, bool fSuperblockPartOnly)
 {
     double dDiff;
@@ -1281,7 +1281,7 @@ CAmount GetBlockSubsidy(int nPrevBits, int nPrevHeight, const Consensus::Params&
 
     return fSuperblockPartOnly ? nSuperblockPart : nSubsidy - nSuperblockPart;
 }
-
+//计算给主节点的奖励
 CAmount GetMasternodePayment(int nHeight, CAmount blockValue)
 {
     CAmount ret = blockValue/5; // start at 20%
@@ -1302,7 +1302,7 @@ CAmount GetMasternodePayment(int nHeight, CAmount blockValue)
 
     return ret;
 }
-//判断链的末梢是否合法
+//判断链是不是初始化完了，只进一次 lockIBDState 控制着的
 bool IsInitialBlockDownload()
 {
     static bool lockIBDState = false;
@@ -1327,7 +1327,7 @@ bool IsInitialBlockDownload()
 bool fLargeWorkForkFound = false;
 bool fLargeWorkInvalidChainFound = false;
 CBlockIndex *pindexBestForkTip = NULL, *pindexBestForkBase = NULL;
-//没有看明白
+//没有看明白  ActivateBestChainStep 会调用显示不同的警告信息
 void CheckForkWarningConditions()
 {
     AssertLockHeld(cs_main);
@@ -1408,7 +1408,7 @@ void CheckForkWarningConditionsOnNewFork(CBlockIndex* pindexNewForkTip)
 
     CheckForkWarningConditions();
 }
-
+//链中发现错误的区块
 void static InvalidChainFound(CBlockIndex* pindexNew)
 {
     if (!pindexBestInvalid || pindexNew->nChainWork > pindexBestInvalid->nChainWork)
@@ -1434,20 +1434,20 @@ void static InvalidBlockFound(CBlockIndex *pindex, const CValidationState &state
         InvalidChainFound(pindex);
     }
 }
-
+//更新 tx 中交易状态，同时写入  txundo
 void UpdateCoins(const CTransaction& tx, CValidationState &state, CCoinsViewCache &inputs, CTxUndo &txundo, int nHeight)
 {
     // mark inputs spent
     if (!tx.IsCoinBase()) {
         txundo.vprevout.reserve(tx.vin.size());
-        BOOST_FOREACH(const CTxIn &txin, tx.vin) {
+        BOOST_FOREACH(const CTxIn &txin, tx.vin) {//标注这个交易中的 in 已经消费了
             txundo.vprevout.emplace_back();
             bool is_spent = inputs.SpendCoin(txin.prevout, &txundo.vprevout.back());
             assert(is_spent);
         }
     }
     // add outputs
-    AddCoins(inputs, tx, nHeight);
+    AddCoins(inputs, tx, nHeight);//添加未消费到  inputs
 }
 
 void UpdateCoins(const CTransaction& tx, CValidationState &state, CCoinsViewCache &inputs, int nHeight)
@@ -1455,7 +1455,7 @@ void UpdateCoins(const CTransaction& tx, CValidationState &state, CCoinsViewCach
     CTxUndo txundo;
     UpdateCoins(tx, state, inputs, txundo, nHeight);
 }
-
+//验证签名
 bool CScriptCheck::operator()() {
     const CScript &scriptSig = ptxTo->vin[nIn].scriptSig;
     if (!VerifyScript(scriptSig, scriptPubKey, nFlags, CachingTransactionSignatureChecker(ptxTo, nIn, cacheStore), &error)) {
@@ -1472,23 +1472,25 @@ int GetSpendHeight(const CCoinsViewCache& inputs)
 }
 
 namespace Consensus {
+    //简单的交易检查，这个很多地方重复检查了，是不是应该有个宏控制一下，避免重复检查
 bool CheckTxInputs(const CTransaction& tx, CValidationState& state, const CCoinsViewCache& inputs, int nSpendHeight)
 {
         // This doesn't trigger the DoS code on purpose; if it did, it would make it easier
         // for an attacker to attempt to split the network.
+        // 交易的in必须在pcoinTips类似的未交易列表中
         if (!inputs.HaveInputs(tx))
             return state.Invalid(false, 0, "", "Inputs unavailable");
 
         CAmount nValueIn = 0;
         CAmount nFees = 0;
-        for (unsigned int i = 0; i < tx.vin.size(); i++)
+        for (unsigned int i = 0; i < tx.vin.size(); i++)//检查交接的费用大小合法
         {
             const COutPoint &prevout = tx.vin[i].prevout;
             const Coin& coin = inputs.AccessCoin(prevout);
             assert(!coin.IsSpent());
 
             // If prev is coinbase, check that it's matured
-            if (coin.IsCoinBase()) {
+            if (coin.IsCoinBase()) {//挖矿交易必需大于 COINBASE_MATURITY 才能用呢
                 if (nSpendHeight - coin.nHeight < COINBASE_MATURITY)
                     return state.Invalid(false,
                         REJECT_INVALID, "bad-txns-premature-spend-of-coinbase",
@@ -1502,11 +1504,12 @@ bool CheckTxInputs(const CTransaction& tx, CValidationState& state, const CCoins
 
         }
 
-        if (nValueIn < tx.GetValueOut())
+        if (nValueIn < tx.GetValueOut())//入比出小 ？
             return state.DoS(100, false, REJECT_INVALID, "bad-txns-in-belowout", false,
                 strprintf("value in (%s) < value out (%s)", FormatMoney(nValueIn), FormatMoney(tx.GetValueOut())));
 
         // Tally transaction fees
+        // 交易费用必须合法
         CAmount nTxFee = nValueIn - tx.GetValueOut();
         if (nTxFee < 0)
             return state.DoS(100, false, REJECT_INVALID, "bad-txns-fee-negative");
@@ -1516,11 +1519,11 @@ bool CheckTxInputs(const CTransaction& tx, CValidationState& state, const CCoins
     return true;
 }
 }// namespace Consensus
-
+//主要检查入的签名是否正确
 bool CheckInputs(const CTransaction& tx, CValidationState &state, const CCoinsViewCache &inputs, bool fScriptChecks, unsigned int flags, bool cacheStore, std::vector<CScriptCheck> *pvChecks)
 {
     if (!tx.IsCoinBase())
-    {
+    {   //基础检查
         if (!Consensus::CheckTxInputs(tx, state, inputs, GetSpendHeight(inputs)))//检查 input 钱合法，并且没有交易
             return false;
 
@@ -1536,11 +1539,11 @@ bool CheckInputs(const CTransaction& tx, CValidationState &state, const CCoinsVi
         // is safe because block merkle hashes are still computed and checked,
         // Of course, if an assumed valid block is invalid due to false scriptSigs
         // this optimization would allow an invalid chain to be accepted.
-        if (fScriptChecks) {
+        if (fScriptChecks) { //检查入的签名是否合法
             for (unsigned int i = 0; i < tx.vin.size(); i++) {
                 const COutPoint &prevout = tx.vin[i].prevout;
                 const Coin& coin = inputs.AccessCoin(prevout);
-                assert(!coin.IsSpent());
+                assert(!coin.IsSpent());//这个不能是已经消费了的
 
                 // We very carefully only pass in things to CScriptCheck which
                 // are clearly committed to by tx' witness hash. This provides
@@ -1552,10 +1555,10 @@ bool CheckInputs(const CTransaction& tx, CValidationState &state, const CCoinsVi
 
                 // Verify signature
                 CScriptCheck check(scriptPubKey, amount, tx, i, flags, cacheStore);
-                if (pvChecks) {
+                if (pvChecks) {//外面统一线程检查，把数据传出去即可
                     pvChecks->push_back(CScriptCheck());
                     check.swap(pvChecks->back());
-                } else if (!check()) {
+                } else if (!check()) {//检查失败  调用的是这个函数  bool CScriptCheck::operator()() 
                     if (flags & STANDARD_NOT_MANDATORY_VERIFY_FLAGS) {
                         // Check whether the failure was caused by a
                         // non-mandatory script verification check, such as
@@ -1658,7 +1661,7 @@ bool AbortNode(CValidationState& state, const std::string& strMessage, const std
 }
 
 } // anon namespace
-
+//当一个块无效的时候，从链中删除块的返回值
 enum DisconnectResult
 {
     DISCONNECT_OK,      // All good.
@@ -1672,7 +1675,7 @@ enum DisconnectResult
  * @param view The coins view to which to apply the changes.
  * @param out The out point that corresponds to the tx input.
  * @return A DisconnectResult as an int
- */
+ *///从undo中重新加入交易
 int ApplyTxInUndo(Coin&& undo, CCoinsViewCache& view, const COutPoint& out)
 {
     bool fClean = true;
@@ -1871,9 +1874,9 @@ void static FlushBlockFile(bool fFinalize = false)
 }
 
 bool FindUndoPos(CValidationState &state, int nFile, CDiskBlockPos &pos, unsigned int nAddSize);
-
+//交易签名检查列表
 static CCheckQueue<CScriptCheck> scriptcheckqueue(128);
-
+//签名检查线程
 void ThreadScriptCheck() {
     RenameThread("dash-scriptch");
     scriptcheckqueue.Thread();
@@ -1881,7 +1884,7 @@ void ThreadScriptCheck() {
 
 // Protected by cs_main
 VersionBitsCache versionbitscache;
-
+//计算块的版本号 主要跟主节点有关系
 int32_t ComputeBlockVersion(const CBlockIndex* pindexPrev, const Consensus::Params& params, bool fAssumeMasternodeIsUpgraded)
 {
     LOCK(cs_main);
@@ -1914,7 +1917,7 @@ int32_t ComputeBlockVersion(const CBlockIndex* pindexPrev, const Consensus::Para
 
     return nVersion;
 }
-
+//根据高度取得块的hash
 bool GetBlockHash(uint256& hashRet, int nBlockHeight)
 {
     LOCK(cs_main);
@@ -2437,6 +2440,7 @@ void PruneAndFlush() {
 }
 
 /** Update chainActive and related internal data structures. */
+//当新块加入进来，通知顶部发生变化
 void static UpdateTip(CBlockIndex *pindexNew) {
     const CChainParams& chainParams = Params();
     chainActive.SetTip(pindexNew);
@@ -2458,7 +2462,7 @@ void static UpdateTip(CBlockIndex *pindexNew) {
         int nUpgraded = 0;
         const CBlockIndex* pindex = chainActive.Tip();
         for (int bit = 0; bit < VERSIONBITS_NUM_BITS; bit++) {
-            WarningBitsConditionChecker checker(bit);
+            WarningBitsConditionChecker checker(bit);//检查以前100个块的版本号
             ThresholdState state = checker.GetStateFor(pindex, chainParams.GetConsensus(), warningcache[bit]);
             if (state == THRESHOLD_ACTIVE || state == THRESHOLD_LOCKED_IN) {
                 if (state == THRESHOLD_ACTIVE) {
@@ -2635,7 +2639,7 @@ bool DisconnectBlocks(int blocks)
 
     return true;
 }
-
+//把第一个块从新加入进来试试
 void ReprocessBlocks(int nBlocks)
 {
     LOCK(cs_main);
@@ -2726,6 +2730,7 @@ static CBlockIndex* FindMostWorkChain() {
 }
 
 /** Delete all entries in setBlockIndexCandidates that are worse than the current tip. */
+//在链顶部的刚接受到的块，全部干掉 加载数据库 ActivateBestChainStep 两个地方调用到
 static void PruneBlockIndexCandidates() {
     // Note that we can't delete the current block itself, as we may need to return to it later in case a
     // reorganization to a better block fails.
@@ -2814,7 +2819,7 @@ static bool ActivateBestChainStep(CValidationState& state, const CChainParams& c
 
     return true;
 }
-
+//块头顶部变化通知
 static void NotifyHeaderTip() {
     bool fNotify = false;
     bool fInitialBlockDownload = false;
@@ -2841,7 +2846,7 @@ static void NotifyHeaderTip() {
  * Make the best chain active, in multiple steps. The result is either failure
  * or an activated best chain. pblock is either NULL or a pointer to a block
  * that is already loaded (to avoid loading it again from disk).
- */
+ *///激活块
 bool ActivateBestChain(CValidationState &state, const CChainParams& chainparams, const CBlock *pblock) {
     CBlockIndex *pindexMostWork = NULL;
     CBlockIndex *pindexNewTip = NULL;
@@ -2902,7 +2907,7 @@ bool ActivateBestChain(CValidationState &state, const CChainParams& chainparams,
 
     return true;
 }
-
+//某块无效，删除
 bool InvalidateBlock(CValidationState& state, const Consensus::Params& consensusParams, CBlockIndex *pindex)
 {
     AssertLockHeld(cs_main);
@@ -2942,7 +2947,7 @@ bool InvalidateBlock(CValidationState& state, const Consensus::Params& consensus
     uiInterface.NotifyBlockTip(IsInitialBlockDownload(), pindex->pprev);
     return true;
 }
-
+//setBlockIndexCandidates 把某块加进来，当作最新收到的块处理
 bool ReconsiderBlock(CValidationState& state, CBlockIndex *pindex) {
     AssertLockHeld(cs_main);
 
@@ -2975,7 +2980,7 @@ bool ReconsiderBlock(CValidationState& state, CBlockIndex *pindex) {
     }
     return true;
 }
-
+//收到块头，加入块头列表
 CBlockIndex* AddToBlockIndex(const CBlockHeader& block)
 {
     // Check for duplicate
@@ -2998,7 +3003,7 @@ CBlockIndex* AddToBlockIndex(const CBlockHeader& block)
     {
         pindexNew->pprev = (*miPrev).second;
         pindexNew->nHeight = pindexNew->pprev->nHeight + 1;
-        pindexNew->BuildSkip();
+        pindexNew->BuildSkip();////????????
     }
     pindexNew->nChainWork = (pindexNew->pprev ? pindexNew->pprev->nChainWork : 0) + GetBlockProof(*pindexNew);
     pindexNew->RaiseValidity(BLOCK_VALID_TREE);
@@ -3011,6 +3016,7 @@ CBlockIndex* AddToBlockIndex(const CBlockHeader& block)
 }
 
 /** Mark a block as having its data received and checked (up to BLOCK_VALID_TRANSACTIONS). */
+//块接受到后，处理这个块中的交易
 bool ReceivedBlockTransactions(const CBlock &block, CValidationState& state, CBlockIndex *pindexNew, const CDiskBlockPos& pos)
 {
     pindexNew->nTx = block.vtx.size();
@@ -3055,7 +3061,7 @@ bool ReceivedBlockTransactions(const CBlock &block, CValidationState& state, CBl
 
     return true;
 }
-
+//找某个块写盘的位置
 bool FindBlockPos(CValidationState &state, CDiskBlockPos &pos, unsigned int nAddSize, unsigned int nHeight, uint64_t nTime, bool fKnown = false)
 {
     LOCK(cs_LastBlockFile);
@@ -3112,7 +3118,7 @@ bool FindBlockPos(CValidationState &state, CDiskBlockPos &pos, unsigned int nAdd
     setDirtyFileInfo.insert(nFile);
     return true;
 }
-
+//找undo的位置
 bool FindUndoPos(CValidationState &state, int nFile, CDiskBlockPos &pos, unsigned int nAddSize)
 {
     pos.nFile = nFile;
@@ -3143,7 +3149,7 @@ bool FindUndoPos(CValidationState &state, int nFile, CDiskBlockPos &pos, unsigne
 
     return true;
 }
-
+//检查头部时间和算力
 bool CheckBlockHeader(const CBlockHeader& block, CValidationState& state, bool fCheckPOW)
 {
      
@@ -3159,7 +3165,7 @@ bool CheckBlockHeader(const CBlockHeader& block, CValidationState& state, bool f
 
     return true;
 }
-
+//检查块
 bool CheckBlock(const CBlock& block, CValidationState& state, bool fCheckPOW, bool fCheckMerkleRoot)
 {
     // These are checks that are independent of context.
@@ -3259,7 +3265,7 @@ bool CheckBlock(const CBlock& block, CValidationState& state, bool fCheckPOW, bo
     return true;
 }
 
-
+//LastCheckpoint
 bool  CheckLastCheckpoint(const CBlockIndex* pindex,const CChainParams& chainparams )    {
     const CCheckpointData& data =chainparams.Checkpoints();
     const MapCheckpoints& checkpoints = data.mapCheckpoints;
@@ -3464,6 +3470,7 @@ bool ProcessNewBlockHeaders(const std::vector<CBlockHeader>& headers, CValidatio
 }
 
 /** Store block on disk. If dbp is non-NULL, the file is known to already reside on disk */ 
+//接受块
 static bool AcceptBlock(const CBlock& block, CValidationState& state, const CChainParams& chainparams, CBlockIndex** ppindex, bool fRequested, const CDiskBlockPos* dbp, bool* fNewBlock)
 {//接受到块信息，或者挖矿产生新块
     if (fNewBlock) *fNewBlock = false;

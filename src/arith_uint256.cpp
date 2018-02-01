@@ -243,7 +243,8 @@ uint32_t arith_uint256::GetCompact(bool fNegative) const
     nCompact |= (fNegative && (nCompact & 0x007fffff) ? 0x00800000 : 0);
     return nCompact;
 }
-
+// uint256 8位 256
+// arith_uint256 32 位 256
 uint256 ArithToUint256(const arith_uint256 &a)
 {
     uint256 b;

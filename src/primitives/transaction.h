@@ -66,7 +66,7 @@ class CTxIn
 public:
     COutPoint prevout;// 前一笔交易输出的位置
     CScript scriptSig;// 解锁脚本
-    uint32_t nSequence; // 序列号
+    uint32_t nSequence; //交易锁定标志，或者时间
     // CScriptWitness scriptWitness;隔离见证
 
     /* Setting nSequence to this value for every input in a transaction

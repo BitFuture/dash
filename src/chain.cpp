@@ -50,14 +50,14 @@ CBlockLocator CChain::GetLocator(const CBlockIndex *pindex) const {
 
     return CBlockLocator(vHave);
 }
-
+//找到这个块在链中的分叉点
 const CBlockIndex *CChain::FindFork(const CBlockIndex *pindex) const {
     if (pindex == NULL) {
         return NULL;
     }
     if (pindex->nHeight > Height())
-        pindex = pindex->GetAncestor(Height());
-    while (pindex && !Contains(pindex))
+        pindex = pindex->GetAncestor(Height());//先找到顶部高度对应的块头
+    while (pindex && !Contains(pindex))//一直找到本链中包含的块头
         pindex = pindex->pprev;
     return pindex;
 }
