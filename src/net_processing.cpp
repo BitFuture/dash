@@ -56,7 +56,7 @@ struct COrphanTx {
 };
 map<uint256, COrphanTx> mapOrphanTransactions GUARDED_BY(cs_main); //接收到的孤儿交易，
 map<uint256, set<uint256> > mapOrphanTransactionsByPrev GUARDED_BY(cs_main);
-; //孤儿交易的前一交易，当接收到的时候，处理孤儿交易
+  //孤儿交易的前一交易，当接收到的时候，处理孤儿交易，快速查找
 void EraseOrphansFor(NodeId peer) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
 // Internal stuff
@@ -372,6 +372,7 @@ bool CanDirectFetch(const Consensus::Params& consensusParams)
 }
 
 // Requires cs_main
+// 这个连接中，是否已经接受到这个块头
 bool PeerHasHeader(CNodeState* state, CBlockIndex* pindex)
 {
     if (state->pindexBestKnownBlock && pindex == state->pindexBestKnownBlock->GetAncestor(pindex->nHeight))
@@ -383,6 +384,7 @@ bool PeerHasHeader(CNodeState* state, CBlockIndex* pindex)
 
 /** Find the last common ancestor two blocks have.
  *  Both pa and pb must be non-NULL. */
+//找两个块头公共的祖先
 CBlockIndex* LastCommonAncestor(CBlockIndex* pa, CBlockIndex* pb)
 {
     if (pa->nHeight > pb->nHeight) {
@@ -403,6 +405,7 @@ CBlockIndex* LastCommonAncestor(CBlockIndex* pa, CBlockIndex* pb)
 
 /** Update pindexLastCommonBlock and add not-in-flight missing successors to vBlocks, until it has
  *  at most count entries. */
+//查找最后一下需要下载块数据的
 void FindNextBlocksToDownload(NodeId nodeid, unsigned int count, std::vector<CBlockIndex*>& vBlocks, NodeId& nodeStaller, const Consensus::Params& consensusParams)
 {
     if (count == 0)
@@ -624,7 +627,7 @@ void Misbehaving(NodeId pnode, int howmuch)
 //////////////////////////////////////////////////////////////////////////////
 //
 // blockchain -> download logic notification
-//
+//块发生变化，通知到连接 peer
 // 同步区块的回调
 PeerLogicValidation::PeerLogicValidation(CConnman* connmanIn) : connman(connmanIn)
 {
@@ -2697,7 +2700,7 @@ bool SendMessages(CNode* pto, CConnman& connman, std::atomic<bool>& interruptMsg
     }
     return true;
 }
-
+/*
 class CNetProcessingCleanup
 {
 public:
@@ -2708,4 +2711,4 @@ public:
         mapOrphanTransactions.clear();
         mapOrphanTransactionsByPrev.clear();
     }
-} instance_of_cnetprocessingcleanup;
+} instance_of_cnetprocessingcleanup;*/

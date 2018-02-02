@@ -491,7 +491,7 @@ private:
     void UpdateChild(txiter entry, txiter child, bool add);
 
 public:
-    std::map<COutPoint, CInPoint> mapNextTx;
+    std::map<COutPoint, CInPoint> mapNextTx;//out 上一个的输出，作为本输入了，意味这  COutPoint 已经被用了
     std::map<uint256, std::pair<double, CAmount> > mapDeltas;
 
     /** Create a new CTxMemPool.

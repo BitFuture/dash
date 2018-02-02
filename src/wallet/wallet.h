@@ -638,11 +638,11 @@ private:
      * mutated transactions where the mutant gets mined).
      */
     typedef std::multimap<COutPoint, uint256> TxSpends;
-    TxSpends mapTxSpends;
+    TxSpends mapTxSpends;//已经消费的交易
     void AddToSpends(const COutPoint& outpoint, const uint256& wtxid);
     void AddToSpends(const uint256& wtxid);
 
-    std::set<COutPoint> setWalletUTXO;
+    std::set<COutPoint> setWalletUTXO;//未消费的交易
 
     /* Mark a transaction (and its in-wallet descendants) as conflicting with a particular block. */
     void MarkConflicted(const uint256& hashBlock, const uint256& hashTx);

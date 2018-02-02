@@ -90,7 +90,7 @@ int COutput::Priority() const
     //nondenom return largest first
     return -(tx->vout[i].nValue/COIN);
 }
-
+//从钱包中找到某个交易
 const CWalletTx* CWallet::GetWalletTx(const uint256& hash) const
 {
     LOCK(cs_wallet);
@@ -113,10 +113,10 @@ CPubKey CWallet::GenerateNewKey(uint32_t nAccountIndex, bool fInternal)
 
     CPubKey pubkey;
     // use HD key derivation if HD was enabled during wallet creation
-    if (IsHDEnabled()) {
+    if (IsHDEnabled()) {//HD 钱包
         DeriveNewChildKey(metadata, secret, nAccountIndex, fInternal);
         pubkey = secret.GetPubKey();
-    } else {
+    } else {//普通钱包
         secret.MakeNewKey(fCompressed);
 
         // Compressed public keys were introduced in version 0.6.0
@@ -136,7 +136,7 @@ CPubKey CWallet::GenerateNewKey(uint32_t nAccountIndex, bool fInternal)
     }
     return pubkey;
 }
-
+//创建 HD Key
 void CWallet::DeriveNewChildKey(const CKeyMetadata& metadata, CKey& secretRet, uint32_t nAccountIndex, bool fInternal)
 {
     CHDChain hdChainTmp;
@@ -400,7 +400,7 @@ bool CWallet::LoadWatchOnly(const CScript &dest)
 {
     return CCryptoKeyStore::AddWatchOnly(dest);
 }
-
+//解密钱包
 bool CWallet::Unlock(const SecureString& strWalletPassphrase, bool fForMixingOnly)
 {
     SecureString strWalletPassphraseFinal;
@@ -409,6 +409,7 @@ bool CWallet::Unlock(const SecureString& strWalletPassphrase, bool fForMixingOnl
         return true;
 
     // Verify KeePassIntegration
+    // 如果使用上次密码
     if (strWalletPassphrase == "keepass" && GetBoolArg("-keepass", false)) {
         try {
             strWalletPassphraseFinal = keePassInt.retrievePassphrase();
@@ -443,7 +444,7 @@ bool CWallet::Unlock(const SecureString& strWalletPassphrase, bool fForMixingOnl
     }
     return false;
 }
-
+//修改钱包密码
 bool CWallet::ChangeWalletPassphrase(const SecureString& strOldWalletPassphrase, const SecureString& strNewWalletPassphrase)
 {
     bool fWasLocked = IsLocked(true);
@@ -517,7 +518,7 @@ bool CWallet::ChangeWalletPassphrase(const SecureString& strOldWalletPassphrase,
 
     return false;
 }
-
+//钱包对应的做好链
 void CWallet::SetBestChain(const CBlockLocator& loc)
 {
     CWalletDB walletdb(strWalletFile);
@@ -562,7 +563,7 @@ bool CWallet::SetMaxVersion(int nVersion)
 
     return true;
 }
-
+//查找钱包中冲突的消费
 set<uint256> CWallet::GetConflicts(const uint256& txid) const
 {
     set<uint256> result;
@@ -626,7 +627,7 @@ bool CWallet::Verify(const string& walletFile, string& warningString, string& er
     //验证数据库文件
     if (boost::filesystem::exists(GetDataDir() / walletFile))
     {
-        CDBEnv::VerifyResult r = bitdb.Verify(walletFile, CWalletDB::Recover);
+        CDBEnv::VerifyResult r = bitdb.Verify(walletFile, CWalletDB::Recover);//数据库自己底层库检查是否破坏了，否则调用 CWalletDB::Recover 修复
         if (r == CDBEnv::RECOVER_OK)
         {
             warningString += strprintf(_("Warning: wallet.dat corrupt, data salvaged!"
@@ -1212,7 +1213,7 @@ void CWallet::SyncTransaction(const CTransaction& tx, const CBlock* pblock)
     fAnonymizableTallyCachedNonDenom = false;
 }
 
-
+//递归找，根据私钥对比
 isminetype CWallet::IsMine(const CTxIn &txin) const
 {
     {
@@ -1386,7 +1387,7 @@ CAmount CWallet::GetChange(const CTxOut& txout) const
         throw std::runtime_error("CWallet::GetChange(): value out of range");
     return (IsChange(txout) ? txout.nValue : 0);
 }
-
+//重新生成HD钱包
 void CWallet::GenerateNewHDChain()
 {
     CHDChain newHdChain;
@@ -2103,7 +2104,7 @@ std::vector<uint256> CWallet::ResendWalletTransactionsBefore(int64_t nTime, CCon
     }
     return result;
 }
-
+// GetMainSignals().Broadcast 来自于sendmessage线程
 void CWallet::ResendWalletTransactions(int64_t nBestBlockTime, CConnman* connman)
 {
     // Do this infrequently and randomly to avoid giving away
@@ -3606,7 +3607,7 @@ CAmount CWallet::GetMinimumFee(unsigned int nTxBytes, unsigned int nConfirmTarge
         nFeeNeeded = maxTxFee;
     return nFeeNeeded;
 }
-
+//加载钱包
 DBErrors CWallet::LoadWallet(bool& fFirstRunRet)
 {
     if (!fFileBacked)

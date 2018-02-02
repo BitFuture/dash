@@ -69,7 +69,7 @@ WalletModel::~WalletModel()
 {
     unsubscribeFromCoreSignals();
 }
-
+//两个调用方法 
 CAmount WalletModel::getBalance(const CCoinControl *coinControl) const
 {
     if (coinControl)
