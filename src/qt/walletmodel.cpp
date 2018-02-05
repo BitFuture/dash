@@ -69,7 +69,7 @@ WalletModel::~WalletModel()
 {
     unsubscribeFromCoreSignals();
 }
-//两个调用方法 
+//两个调用方法  coinControl 如果存在，取出所有交易，并返回总可用值，否则只返回可用钱
 CAmount WalletModel::getBalance(const CCoinControl *coinControl) const
 {
     if (coinControl)
@@ -289,7 +289,7 @@ WalletModel::SendCoinsReturn WalletModel::prepareTransaction(WalletModelTransact
 
     CAmount nBalance = getBalance(coinControl);
 
-    if(total > nBalance)
+    if(total > nBalance)//找不到足够的钱
     {
         return AmountExceedsBalance;
     }
@@ -297,7 +297,7 @@ WalletModel::SendCoinsReturn WalletModel::prepareTransaction(WalletModelTransact
     {
         LOCK2(cs_main, wallet->cs_wallet);
 
-        transaction.newPossibleKeyChange(wallet);
+        transaction.newPossibleKeyChange(wallet);//创建找零地址
 
         CAmount nFeeRequired = 0;
         int nChangePosRet = -1;
@@ -306,7 +306,7 @@ WalletModel::SendCoinsReturn WalletModel::prepareTransaction(WalletModelTransact
         CWalletTx *newTx = transaction.getTransaction();
         CReserveKey *keyChange = transaction.getPossibleKeyChange();
 
-        if(recipients[0].fUseInstantSend && total > sporkManager.GetSporkValue(SPORK_5_INSTANTSEND_MAX_VALUE)*COIN){
+        if(recipients[0].fUseInstantSend && total > sporkManager.GetSporkValue(SPORK_5_INSTANTSEND_MAX_VALUE)*COIN){//快速交易不能太大值
             Q_EMIT message(tr("Send Coins"), tr("InstantSend doesn't support sending values that high yet. Transactions are currently limited to %1 DASH.").arg(sporkManager.GetSporkValue(SPORK_5_INSTANTSEND_MAX_VALUE)),
                          CClientUIInterface::MSG_ERROR);
             return TransactionCreationFailed;

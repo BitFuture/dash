@@ -2375,10 +2375,10 @@ void CWallet::AvailableCoins(vector<COutput>& vCoins, bool fOnlyConfirmed, const
             if (!CheckFinalTx(*pcoin))
                 continue;
 
-            if (fOnlyConfirmed && !pcoin->IsTrusted())
+            if (fOnlyConfirmed && !pcoin->IsTrusted())//
                 continue;
 
-            if (pcoin->IsCoinBase() && pcoin->GetBlocksToMaturity() > 0)
+            if (pcoin->IsCoinBase() && pcoin->GetBlocksToMaturity() > 0)//挖矿交易必须大于100
                 continue;
 
             int nDepth = pcoin->GetDepthInMainChain(false);
@@ -3167,9 +3167,9 @@ bool CWallet::CreateTransaction(const vector<CRecipient>& vecSend, CWalletTx& wt
 
     CAmount nValue = 0; //总值
     unsigned int nSubtractFeeFromAmount = 0;//自动扣费的总计数
-    BOOST_FOREACH (const CRecipient& recipient, vecSend)
+    BOOST_FOREACH (const CRecipient& recipient, vecSend) //计算总共输出的费用，可以同时发送给多个人
     {
-        if (nValue < 0 || recipient.nAmount < 0)//这个有问题，nValue　初始为　０　一进来就退出了
+        if (nValue < 0 || recipient.nAmount < 0)// 
         {
             strFailReason = _("Transaction amounts must be positive");
             return false;
