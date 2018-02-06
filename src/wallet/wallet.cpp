@@ -959,7 +959,7 @@ bool CWallet::AddToWallet(const CWalletTx& wtxIn, bool fFromLoadWallet, CWalletD
                              wtxIn.GetHash().ToString(),
                              wtxIn.hashBlock.ToString());
             }
-            AddToSpends(hash);
+            AddToSpends(hash);//已经消费了，写标志
             for(unsigned int i = 0; i < wtx.vout.size(); ++i) {
                 if (IsMine(wtx.vout[i]) && !IsSpent(hash, i)) {
                     setWalletUTXO.insert(COutPoint(hash, i));
@@ -1759,7 +1759,7 @@ void CWallet::ReacceptWalletTransactions()
         wtx.AcceptToMemoryPool(false);
     }
 }
-
+//广播交易
 bool CWalletTx::RelayWalletTransaction(CConnman* connman, std::string strCommand)
 {
     assert(pwallet->GetBroadcastTransactions());
@@ -2625,7 +2625,7 @@ bool CWallet::SelectCoins(const CAmount& nTargetValue, set<pair<const CWalletTx*
 {
     // Note: this function should never be used for "always free" tx types like dstx
 
-    vector<COutput> vCoins;
+    vector<COutput> vCoins;//找到所有合法，属于自己的输出
     AvailableCoins(vCoins, true, coinControl, false, nCoinType, fUseInstantSend);
 
     // coin control -> return all selected outputs (we want all selected to go into the transaction for sure)
@@ -3559,7 +3559,7 @@ bool CWallet::CommitTransaction(CWalletTx& wtxNew, CReserveKey& reservekey, CCon
         if (fBroadcastTransactions)
         {
             // Broadcast
-            if (!wtxNew.AcceptToMemoryPool(false))
+            if (!wtxNew.AcceptToMemoryPool(false))//加入池子
             {
                 // This must not fail. The transaction has already been signed and recorded.
                 LogPrintf("CommitTransaction(): Error: Transaction not valid\n");
@@ -4453,7 +4453,7 @@ int CMerkleTx::GetBlocksToMaturity() const
     return max(0, (COINBASE_MATURITY+1) - GetDepthInMainChain());
 }
 
-
+//某条交易自己加入交易池，接受到块，必须在交易池中找到
 bool CMerkleTx::AcceptToMemoryPool(bool fLimitFree, bool fRejectAbsurdFee)
 {
     CValidationState state;

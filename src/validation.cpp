@@ -3859,26 +3859,28 @@ CBlockIndex * InsertBlockIndex(uint256 hash)
 bool static LoadBlockIndexDB()
 {
     const CChainParams& chainparams = Params();
-    if (!pblocktree->LoadBlockIndexGuts(InsertBlockIndex))
+    if (!pblocktree->LoadBlockIndexGuts(InsertBlockIndex))//读取所有块头信息
         return false;
 
     boost::this_thread::interruption_point();
 
     // Calculate nChainWork
     vector<pair<int, CBlockIndex*> > vSortedByHeight;
-    vSortedByHeight.reserve(mapBlockIndex.size());
+    vSortedByHeight.reserve(mapBlockIndex.size());//排序
     BOOST_FOREACH(const PAIRTYPE(uint256, CBlockIndex*)& item, mapBlockIndex)
     {
         CBlockIndex* pindex = item.second;
         vSortedByHeight.push_back(make_pair(pindex->nHeight, pindex));
     }
-    sort(vSortedByHeight.begin(), vSortedByHeight.end());
+    sort(vSortedByHeight.begin(), vSortedByHeight.end());//从新计算难度系数总和
     BOOST_FOREACH(const PAIRTYPE(int, CBlockIndex*)& item, vSortedByHeight)
     {
         CBlockIndex* pindex = item.second;
+        //难度系数总和
         pindex->nChainWork = (pindex->pprev ? pindex->pprev->nChainWork : 0) + GetBlockProof(*pindex);
         // We can link the chain of blocks for which we've received transactions at some point.
         // Pruned nodes may have deleted the block.
+        //交易量总和
         if (pindex->nTx > 0) {
             if (pindex->pprev) {
                 if (pindex->pprev->nChainTx) {
@@ -3891,6 +3893,7 @@ bool static LoadBlockIndexDB()
                 pindex->nChainTx = pindex->nTx;
             }
         }
+        //有交易，假设为新接受到的块
         if (pindex->IsValid(BLOCK_VALID_TRANSACTIONS) && (pindex->nChainTx || pindex->pprev == NULL))
             setBlockIndexCandidates.insert(pindex);
         if (pindex->nStatus & BLOCK_FAILED_MASK && (!pindexBestInvalid || pindex->nChainWork > pindexBestInvalid->nChainWork))
@@ -3902,13 +3905,16 @@ bool static LoadBlockIndexDB()
     }
 
     // Load block file info
+    //读最后块的文件信息
     pblocktree->ReadLastBlockFile(nLastBlockFile);
     vinfoBlockFile.resize(nLastBlockFile + 1);
     LogPrintf("%s: last block file = %i\n", __func__, nLastBlockFile);
+    //读块文件信息
     for (int nFile = 0; nFile <= nLastBlockFile; nFile++) {
         pblocktree->ReadBlockFileInfo(nFile, vinfoBlockFile[nFile]);
     }
     LogPrintf("%s: last block file info: %s\n", __func__, vinfoBlockFile[nLastBlockFile].ToString());
+    //有可能后面还有呢，继续查找到没有为止
     for (int nFile = nLastBlockFile + 1; true; nFile++) {
         CBlockFileInfo info;
         if (pblocktree->ReadBlockFileInfo(nFile, info)) {
@@ -3928,6 +3934,7 @@ bool static LoadBlockIndexDB()
             setBlkDataFiles.insert(pindex->nFile);
         }
     }
+    //查找头部对应的块的位置是否都在
     for (std::set<int>::iterator it = setBlkDataFiles.begin(); it != setBlkDataFiles.end(); it++)
     {
         CDiskBlockPos pos(*it, 0);
@@ -3942,10 +3949,10 @@ bool static LoadBlockIndexDB()
         LogPrintf("LoadBlockIndexDB(): Block files have previously been pruned\n");
 
     // Check whether we need to continue reindexing
-    bool fReindexing = false;
+    bool fReindexing = false;//是否需要重构index
     pblocktree->ReadReindexing(fReindexing);
     fReindex |= fReindexing;
-
+    //InitBlockIndex 以下参数都是 这个函数初始化的时候写入的，也就是第一次写入有效
     // Check whether we have a transaction index
     pblocktree->ReadFlag("txindex", fTxIndex);
     LogPrintf("%s: transaction index %s\n", __func__, fTxIndex ? "enabled" : "disabled");
@@ -4158,7 +4165,7 @@ bool InitBlockIndex(const CChainParams& chainparams)
 
     return true;
 }
-
+//从blck中重建索引
 bool LoadExternalBlockFile(const CChainParams& chainparams, FILE* fileIn, CDiskBlockPos *dbp)
 {
     // Map of disk positions for blocks with unknown parent (only used for reindex)
@@ -4195,7 +4202,7 @@ bool LoadExternalBlockFile(const CChainParams& chainparams, FILE* fileIn, CDiskB
                 break;
             }
             try {
-                // read block
+                // read block  读块信息
                 uint64_t nBlockPos = blkdat.GetPos();
                 if (dbp)
                     dbp->nPos = nBlockPos;
@@ -4205,7 +4212,8 @@ bool LoadExternalBlockFile(const CChainParams& chainparams, FILE* fileIn, CDiskB
                 blkdat >> block;
                 nRewind = blkdat.GetPos();
 
-                // detect out of order blocks, and store them for later
+                // detect out of order blocks, and store them for later 顺序有问题 hashPrevBlock 
+                //必须一个一个的按顺序读盘，并加入
                 uint256 hash = block.GetHash();
                 if (hash != chainparams.GetConsensus().hashGenesisBlock && mapBlockIndex.find(block.hashPrevBlock) == mapBlockIndex.end()) {
                     LogPrint("reindex", "%s: Out of order block %s, parent %s not known\n", __func__, hash.ToString(),
@@ -4236,7 +4244,7 @@ bool LoadExternalBlockFile(const CChainParams& chainparams, FILE* fileIn, CDiskB
                 }
 
                 NotifyHeaderTip();
-
+                //对于mapBlockIndex 中没有的数据， 从新根据其中记录的位置取数据
                 // Recursively process earlier encountered successors of this block
                 deque<uint256> queue;
                 queue.push_back(hash);

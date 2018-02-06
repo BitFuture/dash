@@ -732,7 +732,7 @@ void ThreadImport(std::vector<boost::filesystem::path> vImportFiles)
     CImportingNow imp;
 
     // -reindex
-    if (fReindex) {
+    if (fReindex) {//重新整理一遍数据
         int nFile = 0;
         while (true) {
             CDiskBlockPos pos(nFile, 0);
