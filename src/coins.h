@@ -158,6 +158,9 @@ public:
     //! Retrieve the block hash whose state this CCoinsView currently represents
     virtual uint256 GetBestBlock() const;
 
+    virtual void clear()  const;
+
+    virtual void testtrace();
     //! Do a bulk modification (multiple Coin changes + BestBlock change).
     //! The passed mapCoins can be modified.
     virtual bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock);
@@ -257,7 +260,8 @@ public:
      * If false is returned, the state of this cache (and its backing view) will be undefined.
      */
     bool Flush();
-
+    void clear()  const;
+    void testtrace();
     /**
      * Removes the UTXO with the given outpoint from the cache, if it is
      * not modified.

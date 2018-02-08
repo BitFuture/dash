@@ -13,6 +13,9 @@
 bool CCoinsView::GetCoin(const COutPoint &outpoint, Coin &coin) const { return false; }
 uint256 CCoinsView::GetBestBlock() const { return uint256(); }
 bool CCoinsView::BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock) { return false; }
+void CCoinsView::clear()  const {}
+void CCoinsView::testtrace() {}
+
 CCoinsViewCursor *CCoinsView::Cursor() const { return 0; }
 
 bool CCoinsView::HaveCoin(const COutPoint &outpoint) const
@@ -148,7 +151,20 @@ uint256 CCoinsViewCache::GetBestBlock() const {
 void CCoinsViewCache::SetBestBlock(const uint256 &hashBlockIn) {
     hashBlock = hashBlockIn;
 }
+void CCoinsViewCache::testtrace()
+{
+    if(base)
+       base ->testtrace();
 
+   for (CCoinsMap::iterator it = cacheCoins.begin(); it != cacheCoins.end();) 
+   {
+      /* const COutPoint& id=it->first;
+       LogPrintf("%d\n"),id.
+       int l=0;
+       l++;*/
+   }
+}
+ 
 bool CCoinsViewCache::BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlockIn) {
     for (CCoinsMap::iterator it = mapCoins.begin(); it != mapCoins.end();) {
         if (it->second.flags & CCoinsCacheEntry::DIRTY) { // Ignore non-dirty entries (optimization).
@@ -204,7 +220,14 @@ bool CCoinsViewCache::BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlockIn
     hashBlock = hashBlockIn;
     return true;
 }
-
+ void  CCoinsViewCache::clear() const
+ {
+     if(base)
+       base ->clear();
+    hashBlock.SetNull();
+    cacheCoins.clear();
+    cachedCoinsUsage = 0;
+ }
 bool CCoinsViewCache::Flush() {
     bool fOk = base->BatchWrite(cacheCoins, hashBlock);
     cacheCoins.clear();

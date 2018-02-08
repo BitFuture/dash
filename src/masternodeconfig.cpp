@@ -1,16 +1,18 @@
 
 #include "netbase.h"
+#include "netaddress.h"
 #include "masternodeconfig.h"
 #include "util.h"
 #include "chainparams.h"
-
+ 
 #include <boost/filesystem.hpp>
 #include <boost/filesystem/fstream.hpp>
+#include <boost/foreach.hpp>
 
 CMasternodeConfig masternodeConfig;
 
-void CMasternodeConfig::add(std::string alias, std::string ip, std::string privKey, std::string txHash, std::string outputIndex) {
-    CMasternodeEntry cme(alias, ip, privKey, txHash, outputIndex);
+void CMasternodeConfig::add(std::string alias, std::string ip,std::string iplook, std::string privKey, std::string txHash, std::string outputIndex) {
+    CMasternodeEntry cme(alias, ip,iplook, privKey, txHash, outputIndex);
     entries.push_back(cme);
 }
 
@@ -58,12 +60,26 @@ bool CMasternodeConfig::read(std::string& strErr) {
         int port = 0;
         std::string hostname = "";
         SplitHostPort(ip, port, hostname);
+
         if(port == 0 || hostname == "") {
             strErr = _("Failed to parse host:port string") + "\n"+
                     strprintf(_("Line: %d"), linenumber) + "\n\"" + line + "\"";
             streamConfig.close();
             return false;
         }
+
+        std::vector<CNetAddr> vIPs;
+        std::string sIPLook = hostname;
+        if (LookupHost(hostname.c_str(), vIPs, 0, true) &&vIPs.size()>0 )
+        {                 
+        }
+        else
+        {
+            strErr = _("Failed to LookupHost host:port string") + "\n"+hostname;
+            streamConfig.close();
+            return false;
+        }
+
         int mainnetDefaultPort = Params(CBaseChainParams::MAIN).GetDefaultPort();
         if(Params().NetworkIDString() == CBaseChainParams::MAIN) {
             if(port != mainnetDefaultPort) {
@@ -82,8 +98,12 @@ bool CMasternodeConfig::read(std::string& strErr) {
             return false;
         }
 
-
-        add(alias, ip, privKey, txHash, outputIndex);
+        BOOST_FOREACH(const CNetAddr& ipfor, vIPs)
+        {
+           CService addr = CService(ipfor, port) ;
+           sIPLook =  addr.  ToStringIPPort() ; 
+           add(alias, ip,sIPLook, privKey, txHash, outputIndex);
+        }     
     }
 
     streamConfig.close();

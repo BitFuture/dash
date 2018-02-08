@@ -726,7 +726,7 @@ public:
         vecAnonymizableTallyCachedNonDenom.clear();
     }
 
-    std::map<uint256, CWalletTx> mapWallet;
+    std::map<uint256, CWalletTx> mapWallet;//所有属于自己这个钱包的钱
     std::list<CAccountingEntry> laccentries;
 
     typedef std::pair<CWalletTx*, CAccountingEntry*> TxPair;

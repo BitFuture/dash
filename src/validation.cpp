@@ -559,6 +559,7 @@ bool AcceptToMemoryPoolWorker(CTxMemPool& pool, CValidationState &state, const C
                               bool* pfMissingInputs, bool fOverrideMempoolLimit, bool fRejectAbsurdFee,
                               std::vector<COutPoint>& coins_to_uncache, bool fDryRun)
 {
+    
     AssertLockHeld(cs_main);
     if (pfMissingInputs)
         *pfMissingInputs = false;//是否缺少输入，证明为孤儿

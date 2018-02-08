@@ -19,14 +19,16 @@ public:
     private:
         std::string alias;  //别名
         std::string ip;     //ip 
+        std::string iplook;     //ip 
         std::string privKey;
         std::string txHash; 
         std::string outputIndex;
     public:
 
-        CMasternodeEntry(std::string alias, std::string ip, std::string privKey, std::string txHash, std::string outputIndex) {
+        CMasternodeEntry(std::string alias, std::string ip, std::string iplook, std::string privKey, std::string txHash, std::string outputIndex) {
             this->alias = alias;
             this->ip = ip;
+            this->iplook = iplook;
             this->privKey = privKey;
             this->txHash = txHash;
             this->outputIndex = outputIndex;
@@ -67,6 +69,9 @@ public:
         const std::string& getIp() const {
             return ip;
         }
+        const std::string& getIpLook() const {
+            return iplook;
+        }
 
         void setIp(const std::string& ip) {
             this->ip = ip;
@@ -79,7 +84,7 @@ public:
 
     void clear();
     bool read(std::string& strErr);
-    void add(std::string alias, std::string ip, std::string privKey, std::string txHash, std::string outputIndex);
+    void add(std::string alias, std::string ip, std::string iplook, std::string privKey, std::string txHash, std::string outputIndex);
 
     std::vector<CMasternodeEntry>& getEntries() {
         return entries;

@@ -258,7 +258,7 @@ UniValue masternode(const UniValue& params, bool fHelp)
                 std::string strError;
                 CMasternodeBroadcast mnb;
 
-                bool fResult = CMasternodeBroadcast::Create(mne.getIp(), mne.getPrivKey(), mne.getTxHash(), mne.getOutputIndex(), strError, mnb);
+                bool fResult = CMasternodeBroadcast::Create(mne.getIpLook(), mne.getPrivKey(), mne.getTxHash(), mne.getOutputIndex(), strError, mnb);
 
                 statusObj.push_back(Pair("result", fResult ? "successful" : "failed"));
                 if(fResult) {
@@ -308,7 +308,7 @@ UniValue masternode(const UniValue& params, bool fHelp)
             if(strCommand == "start-missing" && fFound) continue;
             if(strCommand == "start-disabled" && fFound && mn.IsEnabled()) continue;
 
-            bool fResult = CMasternodeBroadcast::Create(mne.getIp(), mne.getPrivKey(), mne.getTxHash(), mne.getOutputIndex(), strError, mnb);
+            bool fResult = CMasternodeBroadcast::Create(mne.getIpLook(), mne.getPrivKey(), mne.getTxHash(), mne.getOutputIndex(), strError, mnb);
 
             UniValue statusObj(UniValue::VOBJ);
             statusObj.push_back(Pair("alias", mne.getAlias()));
@@ -648,7 +648,7 @@ UniValue masternodebroadcast(const UniValue& params, bool fHelp)
                 std::string strError;
                 CMasternodeBroadcast mnb;
 
-                bool fResult = CMasternodeBroadcast::Create(mne.getIp(), mne.getPrivKey(), mne.getTxHash(), mne.getOutputIndex(), strError, mnb, true);
+                bool fResult = CMasternodeBroadcast::Create(mne.getIpLook(), mne.getPrivKey(), mne.getTxHash(), mne.getOutputIndex(), strError, mnb, true);
 
                 statusObj.push_back(Pair("result", fResult ? "successful" : "failed"));
                 if(fResult) {
@@ -696,7 +696,7 @@ UniValue masternodebroadcast(const UniValue& params, bool fHelp)
             std::string strError;
             CMasternodeBroadcast mnb;
 
-            bool fResult = CMasternodeBroadcast::Create(mne.getIp(), mne.getPrivKey(), mne.getTxHash(), mne.getOutputIndex(), strError, mnb, true);
+            bool fResult = CMasternodeBroadcast::Create(mne.getIpLook(), mne.getPrivKey(), mne.getTxHash(), mne.getOutputIndex(), strError, mnb, true);
 
             UniValue statusObj(UniValue::VOBJ);
             statusObj.push_back(Pair("alias", mne.getAlias()));

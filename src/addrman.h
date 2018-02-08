@@ -32,7 +32,7 @@ public:
 
 private:
     //! where knowledge about this address first came from
-    CNetAddr source;//广播添加的时候，接受到广播的连接地址，也就是说这个地址谁广播过来的
+    CNetAddr source;//广播添加的时候，接受到广播的连接地址，也就是说这个地址谁广播过来的 addrman.Add(vAdd, seedSource)
 
     //! last successful connection by us
     int64_t nLastSuccess;//最后 good的时间
