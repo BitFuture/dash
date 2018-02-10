@@ -158,7 +158,7 @@ public:
 
     uint256 nCollateralMinConfBlockHash{};
     int nBlockLastPaid{};
-    int nPoSeBanScore{};
+    int nPoSeBanScore{};//有问题的次数，检查重复，和节点数据检查的时候会 +1
     int nPoSeBanHeight{};
     bool fAllowMixingTx{};
     bool fUnitTest = false;
@@ -360,9 +360,9 @@ public:
 class CMasternodeVerification
 {
 public:
-    CTxIn vin1{};
-    CTxIn vin2{};
-    CService addr{};
+    CTxIn vin1{};//这个是需要校验的
+    CTxIn vin2{};//这个事发送校验的本机主节点信息
+    CService addr{};//对方地址
     int nonce{};
     int nBlockHeight{};
     std::vector<unsigned char> vchSig1{};

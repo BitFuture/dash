@@ -2144,14 +2144,14 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
     boost::filesystem::path pathDB = GetDataDir();
     std::string strDBName;
 
-    strDBName = "mncache.dat";
+    strDBName = "mncache.dat";//主节点连接信息
     uiInterface.InitMessage(_("Loading masternode cache..."));
     CFlatDB<CMasternodeMan> flatdb1(strDBName, "magicMasternodeCache");
     if(!flatdb1.Load(mnodeman)) {
         return InitError(_("Failed to load masternode cache from") + "\n" + (pathDB / strDBName).string());
     }
 
-    if(mnodeman.size()) {
+    if(mnodeman.size()) {//主节点数据
         strDBName = "mnpayments.dat";
         uiInterface.InitMessage(_("Loading masternode payment cache..."));
         CFlatDB<CMasternodePayments> flatdb2(strDBName, "magicMasternodePaymentsCache");
@@ -2170,7 +2170,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
         uiInterface.InitMessage(_("Masternode cache is empty, skipping payments and governance cache..."));
     }
 
-    strDBName = "netfulfilled.dat";
+    strDBName = "netfulfilled.dat";//状态信息
     uiInterface.InitMessage(_("Loading fulfilled requests cache..."));
     CFlatDB<CNetFulfilledRequestManager> flatdb4(strDBName, "magicFulfilledCache");
     if(!flatdb4.Load(netfulfilledman)) {

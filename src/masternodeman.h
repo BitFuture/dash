@@ -46,23 +46,23 @@ private:
     mutable CCriticalSection cs;
 
     // Keep track of current block height
-    int nCachedBlockHeight;
+    int nCachedBlockHeight;//当前块高度
 
     // map to hold all MNs
-    std::map<COutPoint, CMasternode> mapMasternodes;
+    std::map<COutPoint, CMasternode> mapMasternodes; //所有主节点
     // who's asked for the Masternode list and the last time
-    std::map<CNetAddr, int64_t> mAskedUsForMasternodeList;
+    std::map<CNetAddr, int64_t> mAskedUsForMasternodeList;//谁向我要过主节点列表
     // who we asked for the Masternode list and the last time
-    std::map<CNetAddr, int64_t> mWeAskedForMasternodeList; //已经问过了，里面有时间记录，隔断时间再问
+    std::map<CNetAddr, int64_t> mWeAskedForMasternodeList; //我向谁要过列表，已经问过了，里面有时间记录，隔断时间再问
     // which Masternodes we've asked for
-    std::map<COutPoint, std::map<CNetAddr, int64_t> > mWeAskedForMasternodeListEntry;
+    std::map<COutPoint, std::map<CNetAddr, int64_t> > mWeAskedForMasternodeListEntry;//那些节点已经要过
     // who we asked for the masternode verification
-    std::map<CNetAddr, CMasternodeVerification> mWeAskedForVerification;
+    std::map<CNetAddr, CMasternodeVerification> mWeAskedForVerification;//那些节点我已经要求校验过
 
     // these maps are used for masternode recovery from MASTERNODE_NEW_START_REQUIRED state
-    std::map<uint256, std::pair< int64_t, std::set<CNetAddr> > > mMnbRecoveryRequests;
-    std::map<uint256, std::vector<CMasternodeBroadcast> > mMnbRecoveryGoodReplies;
-    std::list< std::pair<CService, uint256> > listScheduledMnbRequestConnections;
+    std::map<uint256, std::pair< int64_t, std::set<CNetAddr> > > mMnbRecoveryRequests;//发送请求的时间和hash
+    std::map<uint256, std::vector<CMasternodeBroadcast> > mMnbRecoveryGoodReplies;//接受到的有效数据，
+    std::list< std::pair<CService, uint256> > listScheduledMnbRequestConnections; //发送主节点请求的列表
 
     /// Set when masternodes are added, cleared when CGovernanceManager is notified
     bool fMasternodesAdded;
@@ -81,12 +81,12 @@ private:
     bool GetMasternodeScores(const uint256& nBlockHash, score_pair_vec_t& vecMasternodeScoresRet, int nMinProtocol = 0);
 
 public:
-    // Keep track of all broadcasts I've seen
-    std::map<uint256, std::pair<int64_t, CMasternodeBroadcast> > mapSeenMasternodeBroadcast;
+    // Keep track of all broadcasts I've seen   
+    std::map<uint256, std::pair<int64_t, CMasternodeBroadcast> > mapSeenMasternodeBroadcast;//我收到的主节点，主节点列表是所有节点，这个是我收到消息的
     // Keep track of all pings I've seen
-    std::map<uint256, CMasternodePing> mapSeenMasternodePing;
+    std::map<uint256, CMasternodePing> mapSeenMasternodePing;//收到的 ping
     // Keep track of all verifications I've seen
-    std::map<uint256, CMasternodeVerification> mapSeenMasternodeVerification;
+    std::map<uint256, CMasternodeVerification> mapSeenMasternodeVerification;//收到的校验
     // keep track of dsq count to prevent masternodes from gaming darksend queue
     int64_t nDsqCount;
 

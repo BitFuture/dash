@@ -157,7 +157,11 @@ void CMasternodeMan::Check()
         mnpair.second.Check();
     }
 }
-
+//privatesend 中每1分钟调用一次，
+//检查主节点是否消费
+//检查主节点重新校验应答数据，便于更行主节点状态
+//检查各种同步数据的超时
+//如果需要发送requier，，发送指令
 void CMasternodeMan::CheckAndRemove(CConnman& connman)
 {
     if(!masternodeSync.IsMasternodeListSynced()) return;
@@ -169,18 +173,18 @@ void CMasternodeMan::CheckAndRemove(CConnman& connman)
         // in CheckMnbAndUpdateMasternodeList()
         LOCK2(cs_main, cs);
 
-        Check();
+        Check();//整体检查，消费 POSE 超时
 
         // Remove spent masternodes, prepare structures and make requests to reasure the state of inactive ones
         rank_pair_vec_t vecMasternodeRanks;
         // ask for up to MNB_RECOVERY_MAX_ASK_ENTRIES masternode entries at a time
         int nAskForMnbRecovery = MNB_RECOVERY_MAX_ASK_ENTRIES;
         std::map<COutPoint, CMasternode>::iterator it = mapMasternodes.begin();
-        while (it != mapMasternodes.end()) {
+        while (it != mapMasternodes.end()) {//循环所有主节点
             CMasternodeBroadcast mnb = CMasternodeBroadcast(it->second);
             uint256 hash = mnb.GetHash();
             // If collateral was spent ...
-            if (it->second.IsOutpointSpent()) {
+            if (it->second.IsOutpointSpent()) {//已经消费了
                 LogPrint("masternode", "CMasternodeMan::CheckAndRemove -- Removing Masternode: %s  addr=%s  %i now\n", it->second.GetStateString(), it->second.addr.ToString(), size() - 1);
 
                 // erase all of the broadcasts we've seen from this txin, ...
@@ -194,13 +198,13 @@ void CMasternodeMan::CheckAndRemove(CConnman& connman)
             } else {
                 bool fAsk = (nAskForMnbRecovery > 0) &&
                             masternodeSync.IsSynced() &&
-                            it->second.IsNewStartRequired() &&
-                            !IsMnbRecoveryRequested(hash);
-                if(fAsk) {
+                            it->second.IsNewStartRequired() &&//主节点重现取状态标志
+                            !IsMnbRecoveryRequested(hash);//下面代码已经发送过啦，接到后会删除
+                if(fAsk) {//重新需要同步数据 Required  会在外部设置状态 Check函数会设置一部分
                     // this mn is in a non-recoverable state and we haven't asked other nodes yet
                     std::set<CNetAddr> setRequested;
                     // calulate only once and only when it's needed
-                    if(vecMasternodeRanks.empty()) {
+                    if(vecMasternodeRanks.empty()) {//随机抽取一部分主节点去问问
                         int nRandomBlockHeight = GetRandInt(nCachedBlockHeight);
                         GetMasternodeRanks(vecMasternodeRanks, nRandomBlockHeight);
                     }
@@ -229,7 +233,7 @@ void CMasternodeMan::CheckAndRemove(CConnman& connman)
         // proces replies for MASTERNODE_NEW_START_REQUIRED masternodes
         LogPrint("masternode", "CMasternodeMan::CheckAndRemove -- mMnbRecoveryGoodReplies size=%d\n", (int)mMnbRecoveryGoodReplies.size());
         std::map<uint256, std::vector<CMasternodeBroadcast> >::iterator itMnbReplies = mMnbRecoveryGoodReplies.begin();
-        while(itMnbReplies != mMnbRecoveryGoodReplies.end()){
+        while(itMnbReplies != mMnbRecoveryGoodReplies.end()){//上面问主节点有数据返回啦，加进来
             if(mMnbRecoveryRequests[itMnbReplies->first].first < GetTime()) {
                 // all nodes we asked should have replied now
                 if(itMnbReplies->second.size() >= MNB_RECOVERY_QUORUM_REQUIRED) {
@@ -265,7 +269,7 @@ void CMasternodeMan::CheckAndRemove(CConnman& connman)
         // check who's asked for the Masternode list
         std::map<CNetAddr, int64_t>::iterator it1 = mAskedUsForMasternodeList.begin();
         while(it1 != mAskedUsForMasternodeList.end()){
-            if((*it1).second < GetTime()) {
+            if((*it1).second < GetTime()) {//超时无应答
                 mAskedUsForMasternodeList.erase(it1++);
             } else {
                 ++it1;
@@ -275,7 +279,7 @@ void CMasternodeMan::CheckAndRemove(CConnman& connman)
         // check who we asked for the Masternode list
         it1 = mWeAskedForMasternodeList.begin();
         while(it1 != mWeAskedForMasternodeList.end()){
-            if((*it1).second < GetTime()){
+            if((*it1).second < GetTime()){//超时无应答
                 mWeAskedForMasternodeList.erase(it1++);
             } else {
                 ++it1;
@@ -398,7 +402,7 @@ int CMasternodeMan::CountByIP(int nNetworkType)
     return nNodeCount;
 }
 */
-
+//同步主节点列表数据请求
 void CMasternodeMan::DsegUpdate(CNode* pnode, CConnman& connman)
 {
     LOCK(cs);
@@ -489,7 +493,12 @@ bool CMasternodeMan::GetNextMasternodeInQueueForPayment(bool fFilterSigTime, int
 {
     return GetNextMasternodeInQueueForPayment(nCachedBlockHeight, fFilterSigTime, nCountRet, mnInfoRet);
 }
-
+//计算矿工奖励的主节点
+//主节点个数必须大于3 
+//几个条件，主节点合法，版本合法，确认时间大于节点总数*块时间，押金确认大于节点总数
+//按已经收到的奖励倒序，钱少的先奖励
+//如果合法的太少，去掉确认时间条件，再来
+//找总结点/10次，找到其中和当前hash最接近的主节点，也算一种随机选中，但是其他节点会校验，所以随机选中的规则大家必须一致
 bool CMasternodeMan::GetNextMasternodeInQueueForPayment(int nBlockHeight, bool fFilterSigTime, int& nCountRet, masternode_info_t& mnInfoRet)
 {
     mnInfoRet = masternode_info_t();
@@ -530,7 +539,7 @@ bool CMasternodeMan::GetNextMasternodeInQueueForPayment(int nBlockHeight, bool f
         if(fFilterSigTime && mnpair.second.sigTime + (nMnCount*2.6*60) > GetAdjustedTime()) continue; //主节点必须等待一定时间 
 
         //make sure it has at least as many confirmations as there are masternodes
-        if(GetUTXOConfirmations(mnpair.first) < nMnCount) continue; //被其他节点认可的个数，不能少于总节点个数
+        if(GetUTXOConfirmations(mnpair.first) < nMnCount) continue; //押金必须确认数量大于主节点数
 
         vecMasternodeLastPaid.push_back(std::make_pair(mnpair.second.GetLastPaidBlock(), &mnpair.second));
     }
@@ -541,7 +550,7 @@ bool CMasternodeMan::GetNextMasternodeInQueueForPayment(int nBlockHeight, bool f
     if(fFilterSigTime && nCountRet < nMnCount/3)//如果有效的，小于总数的 /3 加入最新的，新加入的就不用等待
         return GetNextMasternodeInQueueForPayment(nBlockHeight, false, nCountRet, mnInfoRet);
 
-    // Sort them low to high
+    // Sort them low to high //根据奖励总和倒序
     sort(vecMasternodeLastPaid.begin(), vecMasternodeLastPaid.end(), CompareLastPaidBlock());//基本是根据您得到的费用，倒序
 
     uint256 blockHash;
@@ -614,7 +623,7 @@ masternode_info_t CMasternodeMan::FindRandomNotInVec(const std::vector<COutPoint
     LogPrint("masternode", "CMasternodeMan::FindRandomNotInVec -- failed\n");
     return masternode_info_t();
 }
-
+//只处理版本号
 bool CMasternodeMan::GetMasternodeScores(const uint256& nBlockHash, CMasternodeMan::score_pair_vec_t& vecMasternodeScoresRet, int nMinProtocol)
 {
     vecMasternodeScoresRet.clear();
@@ -698,7 +707,7 @@ bool CMasternodeMan::GetMasternodeRanks(CMasternodeMan::rank_pair_vec_t& vecMast
 
     return true;
 }
-
+//干掉所有主节点连接，重新连接，如果正在混合交易的除外 在privatesend线程中 1 分钟调用一次
 void CMasternodeMan::ProcessMasternodeConnections(CConnman& connman)
 {
     //we don't care about this for regtest
@@ -706,7 +715,7 @@ void CMasternodeMan::ProcessMasternodeConnections(CConnman& connman)
 
     connman.ForEachNode(CConnman::AllNodes, [](CNode* pnode) {
 #ifdef ENABLE_WALLET
-        if(pnode->fMasternode && !privateSendClient.IsMixingMasternode(pnode)) {
+        if(pnode->fMasternode && !privateSendClient.IsMixingMasternode(pnode)) {//正在混合交易的除外
 #else
         if(pnode->fMasternode) {
 #endif // ENABLE_WALLET
@@ -715,7 +724,8 @@ void CMasternodeMan::ProcessMasternodeConnections(CConnman& connman)
         }
     });
 }
-
+//当需要请求的时候 CMasternodeMan::CheckAndRemove 会根据主节点状态，压数据到 listScheduledMnbRequestConnections
+//ThreadMnbRequestConnections 中调用，转换成网络消息发送
 std::pair<CService, std::set<uint256> > CMasternodeMan::PopScheduledMnbRequestConnection()
 {
     LOCK(cs);
@@ -902,7 +912,7 @@ void CMasternodeMan::ProcessMessage(CNode* pfrom, std::string& strCommand, CData
         } else if (mnv.vchSig2.empty()) {
             // CASE 2: we _probably_ got verification we requested from some masternode
             ProcessVerifyReply(pfrom, mnv);
-        } else {
+        } else {//某个主节点要求校验另外一个主节点
             // CASE 3: we _probably_ got verification broadcast signed by some masternode which verified another one
             ProcessVerifyBroadcast(pfrom, mnv);
         }
@@ -910,13 +920,13 @@ void CMasternodeMan::ProcessMessage(CNode* pfrom, std::string& strCommand, CData
 }
 
 // Verification of masternodes via unique direct requests.
-
+// privatesend 中 5 分钟检查一次 并不是检查所有，只是按某个级别的检查
 void CMasternodeMan::DoFullVerificationStep(CConnman& connman)
 {
     if(activeMasternode.outpoint == COutPoint()) return;
     if(!masternodeSync.IsSynced()) return;
 
-    rank_pair_vec_t vecMasternodeRanks;
+    rank_pair_vec_t vecMasternodeRanks;//根据高度，版本，按一定规则排序
     GetMasternodeRanks(vecMasternodeRanks, nCachedBlockHeight - 1, MIN_POSE_PROTO_VERSION);
 
     // Need LOCK2 here to ensure consistent locking order because the SendVerifyRequest call below locks cs_main
@@ -946,7 +956,7 @@ void CMasternodeMan::DoFullVerificationStep(CConnman& connman)
     }
 
     // edge case: list is too short and this masternode is not enabled
-    if(nMyRank == -1) return;
+    if(nMyRank == -1) return;//自己不够级别
 
     // send verify requests to up to MAX_POSE_CONNECTIONS masternodes
     // starting from MAX_POSE_RANK + nMyRank and using MAX_POSE_CONNECTIONS as a step
@@ -991,7 +1001,7 @@ void CMasternodeMan::DoFullVerificationStep(CConnman& connman)
 // find a verified one and ban all the other. If there are many nodes
 // with the same addr but none of them is verified yet, then none of them are banned.
 // It could take many times to run this before most of the duplicate nodes are banned.
-
+// 检查重复的主节点  UpdatedBlockTip 中而来
 void CMasternodeMan::CheckSameAddr()
 {
     if(!masternodeSync.IsSynced() || mapMasternodes.empty()) return;
@@ -1044,7 +1054,7 @@ void CMasternodeMan::CheckSameAddr()
         pmn->IncreasePoSeBanScore();
     }
 }
-
+//发送请求
 bool CMasternodeMan::SendVerifyRequest(const CAddress& addr, const std::vector<CMasternode*>& vSortedByAddr, CConnman& connman)
 {
     if(netfulfilledman.HasFulfilledRequest(addr, strprintf("%s", NetMsgType::MNVERIFY)+"-request")) {
@@ -1068,7 +1078,7 @@ bool CMasternodeMan::SendVerifyRequest(const CAddress& addr, const std::vector<C
 
     return true;
 }
-
+//把自己添上V1，请求别人
 void CMasternodeMan::SendVerifyReply(CNode* pnode, CMasternodeVerification& mnv, CConnman& connman)
 {
     // only masternodes can sign this, why would someone ask regular node?
@@ -1108,7 +1118,7 @@ void CMasternodeMan::SendVerifyReply(CNode* pnode, CMasternodeVerification& mnv,
     connman.PushMessage(pnode, NetMsgType::MNVERIFY, mnv);
     netfulfilledman.AddFulfilledRequest(pnode->addr, strprintf("%s", NetMsgType::MNVERIFY)+"-reply");
 }
-
+//接受到v1已经有，把自己知道的 V2 应该是别人请求自己
 void CMasternodeMan::ProcessVerifyReply(CNode* pnode, CMasternodeVerification& mnv)
 {
     std::string strError;
@@ -1217,7 +1227,8 @@ void CMasternodeMan::ProcessVerifyReply(CNode* pnode, CMasternodeVerification& m
                         (int)vpMasternodesToBan.size(), pnode->addr.ToString());
     }
 }
-
+//V1 V2 签名都有啦，真正的接受校验数据
+//SendVerifyRequest 发起，每个人收到后 填 S1,再广播，每个人被请求后，把自己天道 S2 再广播，验证才算完成
 void CMasternodeMan::ProcessVerifyBroadcast(CNode* pnode, const CMasternodeVerification& mnv)
 {
     std::string strError;
@@ -1228,14 +1239,14 @@ void CMasternodeMan::ProcessVerifyBroadcast(CNode* pnode, const CMasternodeVerif
     }
     mapSeenMasternodeVerification[mnv.GetHash()] = mnv;
 
-    // we don't care about history
-    if(mnv.nBlockHeight < nCachedBlockHeight - MAX_POSE_BLOCKS) {
+    // we don't care about history 
+    if(mnv.nBlockHeight < nCachedBlockHeight - MAX_POSE_BLOCKS) {//发送方块太低啦
         LogPrint("masternode", "CMasternodeMan::ProcessVerifyBroadcast -- Outdated: current block %d, verification block %d, peer=%d\n",
                     nCachedBlockHeight, mnv.nBlockHeight, pnode->id);
         return;
     }
 
-    if(mnv.vin1.prevout == mnv.vin2.prevout) {
+    if(mnv.vin1.prevout == mnv.vin2.prevout) {//自己检查自己，找死
         LogPrint("masternode", "CMasternodeMan::ProcessVerifyBroadcast -- ERROR: same vins %s, peer=%d\n",
                     mnv.vin1.prevout.ToStringShort(), pnode->id);
         // that was NOT a good idea to cheat and verify itself,
@@ -1272,13 +1283,13 @@ void CMasternodeMan::ProcessVerifyBroadcast(CNode* pnode, const CMasternodeVerif
         std::string strMessage2 = strprintf("%s%d%s%s%s", mnv.addr.ToString(false), mnv.nonce, blockHash.ToString(),
                                 mnv.vin1.prevout.ToStringShort(), mnv.vin2.prevout.ToStringShort());
 
-        CMasternode* pmn1 = Find(mnv.vin1.prevout);
+        CMasternode* pmn1 = Find(mnv.vin1.prevout);//这个是需要校验的
         if(!pmn1) {
             LogPrintf("CMasternodeMan::ProcessVerifyBroadcast -- can't find masternode1 %s\n", mnv.vin1.prevout.ToStringShort());
             return;
         }
 
-        CMasternode* pmn2 = Find(mnv.vin2.prevout);
+        CMasternode* pmn2 = Find(mnv.vin2.prevout);//这个事发送校验的本机主节点信息
         if(!pmn2) {
             LogPrintf("CMasternodeMan::ProcessVerifyBroadcast -- can't find masternode2 %s\n", mnv.vin2.prevout.ToStringShort());
             return;
@@ -1302,7 +1313,7 @@ void CMasternodeMan::ProcessVerifyBroadcast(CNode* pnode, const CMasternodeVerif
         if(!pmn1->IsPoSeVerified()) {
             pmn1->DecreasePoSeBanScore();
         }
-        mnv.Relay();
+        mnv.Relay();//继续广播校验
 
         LogPrintf("CMasternodeMan::ProcessVerifyBroadcast -- verified masternode %s for addr %s\n",
                     pmn1->vin.prevout.ToStringShort(), pmn1->addr.ToString());
@@ -1334,7 +1345,7 @@ std::string CMasternodeMan::ToString() const
 
     return info.str();
 }
-
+//主节点自己启动的时候，把自己启动的加进来，广播外面已经做了
 void CMasternodeMan::UpdateMasternodeList(CMasternodeBroadcast mnb, CConnman& connman)
 {
     LOCK2(cs_main, cs);
@@ -1356,7 +1367,8 @@ void CMasternodeMan::UpdateMasternodeList(CMasternodeBroadcast mnb, CConnman& co
         }
     }
 }
-//收到新的主节点，并且更新状态
+//收到新的主节点，并且更新状态  MNANNOUNCE 或 mMnbRecoveryGoodReplies 调用
+//CheckAndRemove 会检查 mMnbRecoveryGoodReplies
 bool CMasternodeMan::CheckMnbAndUpdateMasternodeList(CNode* pfrom, CMasternodeBroadcast mnb, int& nDos, CConnman& connman)
 {
     // Need to lock cs_main here to ensure consistent locking order because the SimpleCheck call below locks cs_main
@@ -1368,7 +1380,7 @@ bool CMasternodeMan::CheckMnbAndUpdateMasternodeList(CNode* pfrom, CMasternodeBr
         LogPrint("masternode", "CMasternodeMan::CheckMnbAndUpdateMasternodeList -- masternode=%s\n", mnb.vin.prevout.ToStringShort());
 
         uint256 hash = mnb.GetHash();
-        if(mapSeenMasternodeBroadcast.count(hash) && !mnb.fRecovery) { //seen
+        if(mapSeenMasternodeBroadcast.count(hash) && !mnb.fRecovery) { //seen  已经在列表中
             LogPrint("masternode", "CMasternodeMan::CheckMnbAndUpdateMasternodeList -- masternode=%s seen\n", mnb.vin.prevout.ToStringShort());
             // less then 2 pings left before this MN goes into non-recoverable state, bump sync timeout
             if(GetTime() - mapSeenMasternodeBroadcast[hash].first > MASTERNODE_NEW_START_REQUIRED_SECONDS - MASTERNODE_MIN_MNP_SECONDS * 2) {
@@ -1389,7 +1401,7 @@ bool CMasternodeMan::CheckMnbAndUpdateMasternodeList(CNode* pfrom, CMasternodeBr
                         CMasternode mnTemp = CMasternode(mnb);
                         mnTemp.Check();
                         LogPrint("masternode", "CMasternodeMan::CheckMnbAndUpdateMasternodeList -- mnb=%s seen request, addr=%s, better lastPing: %d min ago, projected mn state: %s\n", hash.ToString(), pfrom->addr.ToString(), (GetAdjustedTime() - mnb.lastPing.sigTime)/60, mnTemp.GetStateString());
-                        if(mnTemp.IsValidStateForAutoStart(mnTemp.nActiveState)) {
+                        if(mnTemp.IsValidStateForAutoStart(mnTemp.nActiveState)) {//自启动，等待 CheckAndRemove 处理
                             // this node thinks it's a good one
                             LogPrint("masternode", "CMasternodeMan::CheckMnbAndUpdateMasternodeList -- masternode=%s seen good\n", mnb.vin.prevout.ToStringShort());
                             mMnbRecoveryGoodReplies[hash].push_back(mnb);
@@ -1403,13 +1415,13 @@ bool CMasternodeMan::CheckMnbAndUpdateMasternodeList(CNode* pfrom, CMasternodeBr
 
         LogPrint("masternode", "CMasternodeMan::CheckMnbAndUpdateMasternodeList -- masternode=%s new\n", mnb.vin.prevout.ToStringShort());
 
-        if(!mnb.SimpleCheck(nDos)) {
+        if(!mnb.SimpleCheck(nDos)) {//检查是否为非法数据，
             LogPrint("masternode", "CMasternodeMan::CheckMnbAndUpdateMasternodeList -- SimpleCheck() failed, masternode=%s\n", mnb.vin.prevout.ToStringShort());
             return false;
         }
 
         // search Masternode list
-        CMasternode* pmn = Find(mnb.vin.prevout);
+        CMasternode* pmn = Find(mnb.vin.prevout);//删除旧的错误数据
         if(pmn) {
             CMasternodeBroadcast mnbOld = mapSeenMasternodeBroadcast[CMasternodeBroadcast(*pmn).GetHash()].second;
             if(!mnb.Update(pmn, nDos, connman)) {
@@ -1423,7 +1435,7 @@ bool CMasternodeMan::CheckMnbAndUpdateMasternodeList(CNode* pfrom, CMasternodeBr
         }
     }
 
-    if(mnb.CheckOutpoint(nDos)) {
+    if(mnb.CheckOutpoint(nDos)) {//加到主节点列表
         Add(mnb);
         masternodeSync.BumpAssetLastTime("CMasternodeMan::CheckMnbAndUpdateMasternodeList - new");
         // if it matches our Masternode privkey...
@@ -1433,7 +1445,7 @@ bool CMasternodeMan::CheckMnbAndUpdateMasternodeList(CNode* pfrom, CMasternodeBr
                 // ... and PROTOCOL_VERSION, then we've been remotely activated ...
                 LogPrintf("CMasternodeMan::CheckMnbAndUpdateMasternodeList -- Got NEW Masternode entry: masternode=%s  sigTime=%lld  addr=%s\n",
                             mnb.vin.prevout.ToStringShort(), mnb.sigTime, mnb.addr.ToString());
-                activeMasternode.ManageState(connman);
+                activeMasternode.ManageState(connman);//如果是当前主节点
             } else {
                 // ... otherwise we need to reactivate our node, do not add it to the list and do not relay
                 // but also do not ban the node we get this message from
@@ -1441,7 +1453,7 @@ bool CMasternodeMan::CheckMnbAndUpdateMasternodeList(CNode* pfrom, CMasternodeBr
                 return false;
             }
         }
-        mnb.Relay(connman);
+        mnb.Relay(connman);//广播
     } else {
         LogPrintf("CMasternodeMan::CheckMnbAndUpdateMasternodeList -- Rejected Masternode entry: %s  addr=%s\n", mnb.vin.prevout.ToStringShort(), mnb.addr.ToString());
         return false;
@@ -1449,7 +1461,7 @@ bool CMasternodeMan::CheckMnbAndUpdateMasternodeList(CNode* pfrom, CMasternodeBr
 
     return true;
 }
-
+//当有新块来的时候，更新每个主节点收到的奖励
 void CMasternodeMan::UpdateLastPaid(const CBlockIndex* pindex)
 {
     LOCK(cs);
@@ -1465,7 +1477,7 @@ void CMasternodeMan::UpdateLastPaid(const CBlockIndex* pindex)
     //                         nCachedBlockHeight, nMaxBlocksToScanBack, IsFirstRun ? "true" : "false");
 
     for (auto& mnpair: mapMasternodes) {
-        mnpair.second.UpdateLastPaid(pindex, nMaxBlocksToScanBack);
+        mnpair.second.UpdateLastPaid(pindex, nMaxBlocksToScanBack);//每个主节点更新收到的奖励和奖励时间
     }
 
     IsFirstRun = false;
@@ -1507,7 +1519,7 @@ void CMasternodeMan::RemoveGovernanceObject(uint256 nGovernanceObjectHash)
         mnpair.second.RemoveGovernanceObject(nGovernanceObjectHash);
     }
 }
-
+//单独检查某个地址的主节点
 void CMasternodeMan::CheckMasternode(const CPubKey& pubKeyMasternode, bool fForce)
 {
     LOCK(cs);
@@ -1525,7 +1537,7 @@ bool CMasternodeMan::IsMasternodePingedWithin(const COutPoint& outpoint, int nSe
     CMasternode* pmn = Find(outpoint);
     return pmn ? pmn->IsPingedWithin(nSeconds, nTimeToCheckAt) : false;
 }
-
+//通知  outpoint 最后ping
 void CMasternodeMan::SetMasternodeLastPing(const COutPoint& outpoint, const CMasternodePing& mnp)
 {
     LOCK(cs);
@@ -1537,14 +1549,14 @@ void CMasternodeMan::SetMasternodeLastPing(const COutPoint& outpoint, const CMas
     // if masternode uses sentinel ping instead of watchdog
     // we shoud update nTimeLastWatchdogVote here if sentinel
     // ping flag is actual
-    if(mnp.fSentinelIsCurrent) {
+    if(mnp.fSentinelIsCurrent) {//通知dog
         UpdateWatchdogVoteTime(mnp.vin.prevout, mnp.sigTime);
     }
     mapSeenMasternodePing.insert(std::make_pair(mnp.GetHash(), mnp));
 
     CMasternodeBroadcast mnb(*pmn);
     uint256 hash = mnb.GetHash();
-    if(mapSeenMasternodeBroadcast.count(hash)) {
+    if(mapSeenMasternodeBroadcast.count(hash)) {//最后ping的时间
         mapSeenMasternodeBroadcast[hash].second.lastPing = mnp;
     }
 }
@@ -1554,14 +1566,14 @@ void CMasternodeMan::UpdatedBlockTip(const CBlockIndex *pindex)
     nCachedBlockHeight = pindex->nHeight;
     LogPrint("masternode", "CMasternodeMan::UpdatedBlockTip -- nCachedBlockHeight=%d\n", nCachedBlockHeight);
 
-    CheckSameAddr();
+    CheckSameAddr();//检查主节点重复 这个放到这里，毫无意义，应该放到主节点自己的管理流程
 
     if(fMasterNode) {
         // normal wallet does not need to update this every block, doing update on rpc call should be enough
-        UpdateLastPaid(pindex);
+        UpdateLastPaid(pindex); //检查所有主节点收到的奖励
     }
 }
-
+//通知提案管理，主节点删除了 或者增加啦
 void CMasternodeMan::NotifyMasternodeUpdates(CConnman& connman)
 {
     // Avoid double locking

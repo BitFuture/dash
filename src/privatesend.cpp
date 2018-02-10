@@ -459,7 +459,7 @@ void ThreadCheckPrivateSend(CConnman& connman)
         if(masternodeSync.IsBlockchainSynced() && !ShutdownRequested()) {
 
             nTick++;
-
+            //检查押金没有被消费 每5秒检查一次  MASTERNODE_CHECK_SECONDS 检查函数里面有时间控制
             // make sure to check all masternodes first
             mnodeman.Check();
 
@@ -469,9 +469,9 @@ void ThreadCheckPrivateSend(CConnman& connman)
                 activeMasternode.ManageState(connman);
 
             if(nTick % 60 == 0) { //1分钟
-                //干掉所有连接，重新来
-                mnodeman.ProcessMasternodeConnections(connman);
-                mnodeman.CheckAndRemove(connman);
+                
+                mnodeman.ProcessMasternodeConnections(connman);//干掉所有主节点连接，重新连接，如果正在混合交易的除外
+                mnodeman.CheckAndRemove(connman);//检查主节点如果不在，干掉
                 mnpayments.CheckAndRemove();
                 instantsend.CheckAndRemove();
             }

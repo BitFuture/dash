@@ -100,13 +100,13 @@ arith_uint256 CMasternode::CalculateScore(const uint256& blockHash)
     ss << vin.prevout << nCollateralMinConfBlockHash << blockHash;
     return UintToArith256(ss.GetHash());
 }
-
+//检查主节点押金
 CMasternode::CollateralStatus CMasternode::CheckCollateral(const COutPoint& outpoint)
 {
     int nHeight;
     return CheckCollateral(outpoint, nHeight);
 }
-
+//检查本主节点押金是否在，并且没有被消费，注意，只能是1000 
 CMasternode::CollateralStatus CMasternode::CheckCollateral(const COutPoint& outpoint, int& nHeightRet)
 {
     AssertLockHeld(cs_main);
@@ -129,12 +129,12 @@ void CMasternode::Check(bool fForce)
     LOCK(cs);
 
     if(ShutdownRequested()) return;
-
+    //如果不是强制检查，控制检查时间
     if(!fForce && (GetTime() - nTimeLastChecked < MASTERNODE_CHECK_SECONDS)) return;
     nTimeLastChecked = GetTime();
 
     LogPrint("masternode", "CMasternode::Check -- Masternode %s is in %s state\n", vin.prevout.ToStringShort(), GetStateString());
-
+    //nActiveState = MASTERNODE_OUTPOINT_SPENT 检查已经消费啦，什么时候恢复呢
     //once spent, stop doing the checks
     if(IsOutpointSpent()) return;
 
@@ -144,7 +144,7 @@ void CMasternode::Check(bool fForce)
         if(!lockMain) return;
 
         CollateralStatus err = CheckCollateral(vin.prevout);
-        if (err == COLLATERAL_UTXO_NOT_FOUND) {
+        if (err == COLLATERAL_UTXO_NOT_FOUND) {//钱花了
             nActiveState = MASTERNODE_OUTPOINT_SPENT;
             LogPrint("masternode", "CMasternode::Check -- Failed to find Masternode UTXO, masternode=%s\n", vin.prevout.ToStringShort());
             return;
@@ -184,7 +184,7 @@ void CMasternode::Check(bool fForce)
         return;
     }
 
-    // keep old masternodes on start, give them a chance to receive updates...
+    // keep old masternodes on start, give them a chance to receive updates...  600 10分钟必须ping
     bool fWaitForPing = !masternodeSync.IsMasternodeListSynced() && !IsPingedWithin(MASTERNODE_MIN_MNP_SECONDS);
 
     if(fWaitForPing && !fOurMasternode) {
@@ -194,7 +194,7 @@ void CMasternode::Check(bool fForce)
             return;
         }
     }
-
+    //主节点也需要有人用您
     // don't expire if we are still in "waiting for ping" mode unless it's our own masternode
     if(!fWaitForPing || fOurMasternode) {
 
@@ -211,7 +211,7 @@ void CMasternode::Check(bool fForce)
 
         LogPrint("masternode", "CMasternode::Check -- outpoint=%s, nTimeLastWatchdogVote=%d, GetAdjustedTime()=%d, fWatchdogExpired=%d\n",
                 vin.prevout.ToStringShort(), nTimeLastWatchdogVote, GetAdjustedTime(), fWatchdogExpired);
-
+        //看门狗死啦  
         if(fWatchdogExpired) {
             nActiveState = MASTERNODE_WATCHDOG_EXPIRED;
             if(nActiveStatePrev != nActiveState) {
@@ -219,7 +219,7 @@ void CMasternode::Check(bool fForce)
             }
             return;
         }
-
+        
         if(!IsPingedWithin(MASTERNODE_EXPIRATION_SECONDS)) {
             nActiveState = MASTERNODE_EXPIRED;
             if(nActiveStatePrev != nActiveState) {
