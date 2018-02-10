@@ -2153,7 +2153,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             }
         }
 
-        if (found) {
+        if (found) {//不知道该谁处理了，挨个调用一遍把，爱处理不处理
 //probably one the extensions
 #ifdef ENABLE_WALLET
             privateSendClient.ProcessMessage(pfrom, strCommand, vRecv, connman);

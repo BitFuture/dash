@@ -2060,7 +2060,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
 
     // ********************************************************* 
     //  Step 11a: setup PrivateSend 主节点初始化
-    // 是否支持 主节点
+    // 通过命令行启动主节点
     fMasterNode = GetBoolArg("-masternode", false);
     // TODO: masternode should have no wallet
     //如果是主节点，必须打开交易索引，这个应该记录在块数据结构中了
@@ -2186,6 +2186,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
 
     // ********************************************************* Step 11d: start dash-ps-<smth> threads
     //ThreadCheckPrivateSend 同步masternode数据
+    //这个这么称呼有点问题，应该是所有主节点相关数据，都在这个里面处理
     threadGroup.create_thread(boost::bind(&ThreadCheckPrivateSend, boost::ref(*g_connman)));
     if (fMasterNode)
         threadGroup.create_thread(boost::bind(&ThreadCheckPrivateSendServer, boost::ref(*g_connman)));

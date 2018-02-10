@@ -31,7 +31,7 @@ CCriticalSection cs_mapMasternodePaymentVotes;
 *   - Otherblocks are 10% lower in outgoing value, so in total, no extra coins are created
 *   - When non-superblocks are detected, the normal schedule should be maintained
 */
-
+//检查挖矿产生的主节点和提案奖励是否合法
 bool IsBlockValueValid(const CBlock& block, int nBlockHeight, CAmount blockReward, std::string &strErrorRet)
 {
     strErrorRet = "";
@@ -128,7 +128,7 @@ bool IsBlockValueValid(const CBlock& block, int nBlockHeight, CAmount blockRewar
     // it MUST be a regular block
     return isBlockRewardValueMet;
 }
-
+//费用是否合法
 bool IsBlockPayeeValid(const CTransaction& txNew, int nBlockHeight, CAmount blockReward)
 {
     if(!masternodeSync.IsSynced()) {

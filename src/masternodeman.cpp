@@ -406,7 +406,7 @@ void CMasternodeMan::DsegUpdate(CNode* pnode, CConnman& connman)
     if(Params().NetworkIDString() == CBaseChainParams::MAIN) {
         if(!(pnode->addr.IsRFC1918() || pnode->addr.IsLocal())) {
             std::map<CNetAddr, int64_t>::iterator it = mWeAskedForMasternodeList.find(pnode->addr);
-            if(it != mWeAskedForMasternodeList.end() && GetTime() < (*it).second) {
+            if(it != mWeAskedForMasternodeList.end() && GetTime() < (*it).second) {//已经问过了，隔断时间再问
                 LogPrintf("CMasternodeMan::DsegUpdate -- we already asked %s for the list; skipping...\n", pnode->addr.ToString());
                 return;
             }
@@ -753,22 +753,23 @@ void CMasternodeMan::ProcessMessage(CNode* pfrom, std::string& strCommand, CData
         CMasternodeBroadcast mnb;
         vRecv >> mnb;
 
-        pfrom->setAskFor.erase(mnb.GetHash());
+        pfrom->setAskFor.erase(mnb.GetHash());//准备要的列表清除，别随便多要数据
 
-        if(!masternodeSync.IsBlockchainSynced()) return;
+        if(!masternodeSync.IsBlockchainSynced()) return;//块没有同步完 或者开始下一个同步
 
         LogPrint("masternode", "MNANNOUNCE -- Masternode announce, masternode=%s\n", mnb.vin.prevout.ToStringShort());
 
         int nDos = 0;
-
+        //检查并更新状态
         if (CheckMnbAndUpdateMasternodeList(pfrom, mnb, nDos, connman)) {
             // use announced Masternode as a peer
+            // 添加主节点信息，2小时
             connman.AddNewAddress(CAddress(mnb.addr, NODE_NETWORK), pfrom->addr, 2*60*60);
         } else if(nDos > 0) {
             Misbehaving(pfrom->GetId(), nDos);
         }
 
-        if(fMasternodesAdded) {
+        if(fMasternodesAdded) { //governance 主要通知他更新各种状态
             NotifyMasternodeUpdates(connman);
         }
     } else if (strCommand == NetMsgType::MNPING) { //Masternode Ping
@@ -787,7 +788,7 @@ void CMasternodeMan::ProcessMessage(CNode* pfrom, std::string& strCommand, CData
         // Need LOCK2 here to ensure consistent locking order because the CheckAndUpdate call below locks cs_main
         LOCK2(cs_main, cs);
 
-        if(mapSeenMasternodePing.count(nHash)) return; //seen
+        if(mapSeenMasternodePing.count(nHash)) return; //seen //已经通知过了
         mapSeenMasternodePing.insert(std::make_pair(nHash, mnp));
 
         LogPrint("masternode", "MNPING -- Masternode ping, masternode=%s new\n", mnp.vin.prevout.ToStringShort());
@@ -798,7 +799,7 @@ void CMasternodeMan::ProcessMessage(CNode* pfrom, std::string& strCommand, CData
         // if masternode uses sentinel ping instead of watchdog
         // we shoud update nTimeLastWatchdogVote here if sentinel
         // ping flag is actual
-        if(pmn && mnp.fSentinelIsCurrent)
+        if(pmn && mnp.fSentinelIsCurrent)//修改看门狗 保证主节点活着
             UpdateWatchdogVoteTime(mnp.vin.prevout, mnp.sigTime);
 
         // too late, new MNANNOUNCE is required
@@ -817,22 +818,23 @@ void CMasternodeMan::ProcessMessage(CNode* pfrom, std::string& strCommand, CData
 
         // something significant is broken or mn is unknown,
         // we might have to ask for a masternode entry once
-        AskForMN(pfrom, mnp.vin.prevout, connman);
+        AskForMN(pfrom, mnp.vin.prevout, connman);//要列表
 
     } else if (strCommand == NetMsgType::DSEG) { //Get Masternode list or specific entry
+        // 有人要主节点列表
         // Ignore such requests until we are fully synced.
         // We could start processing this after masternode list is synced
         // but this is a heavy one so it's better to finish sync first.
-        if (!masternodeSync.IsSynced()) return;
+        if (!masternodeSync.IsSynced()) return;//自己还没有同步完呢
 
         CTxIn vin;
-        vRecv >> vin;
+        vRecv >> vin;//谁要列表
 
         LogPrint("masternode", "DSEG -- Masternode list, masternode=%s\n", vin.prevout.ToStringShort());
 
         LOCK(cs);
 
-        if(vin == CTxIn()) { //only should ask for this once
+        if(vin == CTxIn()) { //only should ask for this once 空来源，这个是同步主节点列表才会调用
             //local network
             bool isLocal = (pfrom->addr.IsRFC1918() || pfrom->addr.IsLocal());
 
@@ -851,6 +853,7 @@ void CMasternodeMan::ProcessMessage(CNode* pfrom, std::string& strCommand, CData
         int nInvCount = 0;
 
         for (auto& mnpair : mapMasternodes) {
+            // 要某个主节点信息，发送方会指定要那个
             if (vin != CTxIn() && vin != mnpair.second.vin) continue; // asked for specific vin but we are not there yet
             if (mnpair.second.addr.IsRFC1918() || mnpair.second.addr.IsLocal()) continue; // do not send local network masternode
             if (mnpair.second.IsUpdateRequired()) continue; // do not send outdated masternodes
@@ -865,7 +868,7 @@ void CMasternodeMan::ProcessMessage(CNode* pfrom, std::string& strCommand, CData
             nInvCount++;
 
             mapSeenMasternodeBroadcast.insert(std::make_pair(hashMNB, std::make_pair(GetTime(), mnb)));
-            mapSeenMasternodePing.insert(std::make_pair(hashMNP, mnp));
+            mapSeenMasternodePing.insert(std::make_pair(hashMNP, mnp));//发送过，就在ping中不会要了
 
             if (vin.prevout == mnpair.first) {
                 LogPrintf("DSEG -- Sent 1 Masternode inv to peer %d\n", pfrom->id);
@@ -873,7 +876,7 @@ void CMasternodeMan::ProcessMessage(CNode* pfrom, std::string& strCommand, CData
             }
         }
 
-        if(vin == CTxIn()) {
+        if(vin == CTxIn()) {//同步列表才发送这个
             connman.PushMessage(pfrom, NetMsgType::SYNCSTATUSCOUNT, MASTERNODE_SYNC_LIST, nInvCount);
             LogPrintf("DSEG -- Sent %d Masternode invs to peer %d\n", nInvCount, pfrom->id);
             return;
@@ -1353,7 +1356,7 @@ void CMasternodeMan::UpdateMasternodeList(CMasternodeBroadcast mnb, CConnman& co
         }
     }
 }
-
+//收到新的主节点，并且更新状态
 bool CMasternodeMan::CheckMnbAndUpdateMasternodeList(CNode* pfrom, CMasternodeBroadcast mnb, int& nDos, CConnman& connman)
 {
     // Need to lock cs_main here to ensure consistent locking order because the SimpleCheck call below locks cs_main

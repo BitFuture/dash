@@ -31,23 +31,23 @@ extern CMasternodeSync masternodeSync;
 //
 // CMasternodeSync : Sync masternode assets in stages
 //
-
+// 主节点数据同步
 class CMasternodeSync
 {
 private:
     // Keep track of current asset
-    int nRequestedMasternodeAssets;
+    int nRequestedMasternodeAssets;  //当前同步状态
     // Count peers we've requested the asset from
-    int nRequestedMasternodeAttempt;
+    int nRequestedMasternodeAttempt; //同步计数，便于显示进度
 
     // Time when current masternode asset sync started
-    int64_t nTimeAssetSyncStarted;
+    int64_t nTimeAssetSyncStarted;   //同步开始时间，便于超时计算
     // ... last bumped
-    int64_t nTimeLastBumped;
+    int64_t nTimeLastBumped;  //最后接到大部分网络通知的时间，便于超时计算
     // ... or failed
-    int64_t nTimeLastFailure;
+    int64_t nTimeLastFailure; //最后失败时间，便于重新启动同步
 
-    void Fail();
+    void Fail();//失败，一般是超时就失败了
     void ClearFulfilledRequests(CConnman& connman);
 
 public:
@@ -55,7 +55,7 @@ public:
 
 
     void SendGovernanceSyncRequest(CNode* pnode, CConnman& connman);
-
+    //判断同步的各个阶段的状态
     bool IsFailed() { return nRequestedMasternodeAssets == MASTERNODE_SYNC_FAILED; }
     bool IsBlockchainSynced() { return nRequestedMasternodeAssets > MASTERNODE_SYNC_WAITING; }
     bool IsMasternodeListSynced() { return nRequestedMasternodeAssets > MASTERNODE_SYNC_LIST; }
@@ -74,7 +74,8 @@ public:
 
     void ProcessMessage(CNode* pfrom, std::string& strCommand, CDataStream& vRecv);
     void ProcessTick(CConnman& connman);
-
+    //以下网络同步来了，修改 nTimeLastBumped 便于超时计算
+    // CDSNotificationInterface 注册的回调而来
     void AcceptedBlockHeader(const CBlockIndex *pindexNew);
     void NotifyHeaderTip(const CBlockIndex *pindexNew, bool fInitialDownload, CConnman& connman);
     void UpdatedBlockTip(const CBlockIndex *pindexNew, bool fInitialDownload, CConnman& connman);

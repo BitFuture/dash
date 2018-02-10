@@ -454,7 +454,7 @@ void ThreadCheckPrivateSend(CConnman& connman)
         MilliSleep(1000);
 
         // try to sync from all available nodes, one step at a time
-        masternodeSync.ProcessTick(connman);
+        masternodeSync.ProcessTick(connman);//同步数据
 
         if(masternodeSync.IsBlockchainSynced() && !ShutdownRequested()) {
 
@@ -465,16 +465,17 @@ void ThreadCheckPrivateSend(CConnman& connman)
 
             // check if we should activate or ping every few minutes,
             // slightly postpone first run to give net thread a chance to connect to some peers
-            if(nTick % MASTERNODE_MIN_MNP_SECONDS == 15)
+            if(nTick % MASTERNODE_MIN_MNP_SECONDS == 15)//10分钟检查一遍自己
                 activeMasternode.ManageState(connman);
 
-            if(nTick % 60 == 0) {
+            if(nTick % 60 == 0) { //1分钟
+                //干掉所有连接，重新来
                 mnodeman.ProcessMasternodeConnections(connman);
                 mnodeman.CheckAndRemove(connman);
                 mnpayments.CheckAndRemove();
                 instantsend.CheckAndRemove();
             }
-            if(fMasterNode && (nTick % (60 * 5) == 0)) {
+            if(fMasterNode && (nTick % (60 * 5) == 0)) {//5分钟检查一遍所有主节点
                 mnodeman.DoFullVerificationStep(connman);
             }
 

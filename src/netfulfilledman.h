@@ -15,6 +15,7 @@ extern CNetFulfilledRequestManager netfulfilledman;
 
 // Fulfilled requests are used to prevent nodes from asking for the same data on sync
 // and from being banned for doing so too often.
+// 网络同步参数，就是地址的每个状态用字符串表示状态，无任何实际功能
 class CNetFulfilledRequestManager
 {
 private:

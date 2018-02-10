@@ -53,7 +53,7 @@ private:
     // who's asked for the Masternode list and the last time
     std::map<CNetAddr, int64_t> mAskedUsForMasternodeList;
     // who we asked for the Masternode list and the last time
-    std::map<CNetAddr, int64_t> mWeAskedForMasternodeList;
+    std::map<CNetAddr, int64_t> mWeAskedForMasternodeList; //已经问过了，里面有时间记录，隔断时间再问
     // which Masternodes we've asked for
     std::map<COutPoint, std::map<CNetAddr, int64_t> > mWeAskedForMasternodeListEntry;
     // who we asked for the masternode verification

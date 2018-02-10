@@ -17,7 +17,7 @@
 
 class CMasternodeSync;
 CMasternodeSync masternodeSync;
-
+//失败
 void CMasternodeSync::Fail()
 {
     nTimeLastFailure = GetTime();
@@ -32,7 +32,7 @@ void CMasternodeSync::Reset()
     nTimeLastBumped = GetTime();
     nTimeLastFailure = 0;
 }
-
+//每次网络刷新其他数据，记录时间，便于超时计算
 void CMasternodeSync::BumpAssetLastTime(std::string strFuncName)
 {
     if(IsSynced() || IsFailed()) return;
@@ -54,7 +54,7 @@ std::string CMasternodeSync::GetAssetName()
         default:                            return "UNKNOWN";
     }
 }
-
+//切换状态
 void CMasternodeSync::SwitchToNextAsset(CConnman& connman)
 {
     switch(nRequestedMasternodeAssets)
@@ -119,7 +119,9 @@ std::string CMasternodeSync::GetSyncStatus()
         default:                            return "";
     }
 }
-
+//处理同步消息
+//bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, int64_t nTimeReceived, CConnman& connman, std::atomic<bool>& interruptMsgProc)
+//主消息流程而来
 void CMasternodeSync::ProcessMessage(CNode* pfrom, std::string& strCommand, CDataStream& vRecv)
 {
     if (strCommand == NetMsgType::SYNCSTATUSCOUNT) { //Sync status count
@@ -149,7 +151,17 @@ void CMasternodeSync::ClearFulfilledRequests(CConnman& connman)
         netfulfilledman.RemoveFulfilledRequest(pnode->addr, "full-sync");
     });
 }
-
+// MASTERNODE_SYNC_LIST 同步主节点列表，给所有节点发送 NetMsgType::DSEG
+// void CMasternodeMan::ProcessMessage 接到 DSEG ,准备数据 
+//  pfrom->PushInventory(CInv(MSG_MASTERNODE_ANNOUNCE, hashMNB));
+//  pfrom->PushInventory(CInv(MSG_MASTERNODE_PING, hashMNP));
+//  等待常规发送 sendmeesage中发送每个连接
+//  CMasternodeMan::ProcessMessage 中处理 MSG_MASTERNODE_ANNOUNCE  MSG_MASTERNODE_PING
+//  MSG_MASTERNODE_ANNOUNCE 发送 NetMsgType::MNANNOUNCE   void CMasternodeMan::ProcessMessage 中处理
+//  注意 1 个小时同步一次所有数据
+//  如果失败 1分钟后同步所有数据
+//  接受到新块头部，通过 Reset同步所有数据
+//  所有数据的同步，都有时间超时，如果超时，进行下一步同步
 void CMasternodeSync::ProcessTick(CConnman& connman)
 {
     static int nTick = 0;
@@ -188,7 +200,7 @@ void CMasternodeSync::ProcessTick(CConnman& connman)
     double nSyncProgress = double(nRequestedMasternodeAttempt + (nRequestedMasternodeAssets - 1) * 8) / (8*4);
     LogPrintf("CMasternodeSync::ProcessTick -- nTick %d nRequestedMasternodeAssets %d nRequestedMasternodeAttempt %d nSyncProgress %f\n", nTick, nRequestedMasternodeAssets, nRequestedMasternodeAttempt, nSyncProgress);
     uiInterface.NotifyAdditionalDataSyncProgressChanged(nSyncProgress);
-
+    //当前所有连接，为啥耀拷贝出来，因为连接会动态变化
     std::vector<CNode*> vNodesCopy = connman.CopyNodeVector();
 
     BOOST_FOREACH(CNode* pnode, vNodesCopy)
@@ -197,6 +209,7 @@ void CMasternodeSync::ProcessTick(CConnman& connman)
         // they are temporary and should be considered unreliable for a sync process.
         // Inbound connection this early is most likely a "masternode" connection
         // initiated from another node, so skip it too.
+        //连接是主节点，自己是主节点，并且被别人连接
         if(pnode->fMasternode || (fMasterNode && pnode->fInbound)) continue;
 
         // QUICK MODE (REGTEST ONLY!)
@@ -219,7 +232,7 @@ void CMasternodeSync::ProcessTick(CConnman& connman)
         }
 
         // NORMAL NETWORK MODE - TESTNET/MAINNET
-        {
+        {   //如果整个都同步完了，停止连接
             if(netfulfilledman.HasFulfilledRequest(pnode->addr, "full-sync")) {
                 // We already fully synced from this node recently,
                 // disconnect to free this connection slot for another peer.
@@ -229,7 +242,7 @@ void CMasternodeSync::ProcessTick(CConnman& connman)
             }
 
             // SPORK : ALWAYS ASK FOR SPORKS AS WE SYNC
-
+            // 以下的操作是按照顺序执行的
             if(!netfulfilledman.HasFulfilledRequest(pnode->addr, "spork-sync")) {
                 // always get sporks first, only request once from each peer
                 netfulfilledman.AddFulfilledRequest(pnode->addr, "spork-sync");
@@ -434,7 +447,7 @@ void CMasternodeSync::NotifyHeaderTip(const CBlockIndex *pindexNew, bool fInitia
         BumpAssetLastTime("CMasternodeSync::NotifyHeaderTip");
     }
 }
-
+//主要是 Reset
 void CMasternodeSync::UpdatedBlockTip(const CBlockIndex *pindexNew, bool fInitialDownload, CConnman& connman)
 {
     LogPrint("mnsync", "CMasternodeSync::UpdatedBlockTip -- pindexNew->nHeight: %d fInitialDownload=%d\n", pindexNew->nHeight, fInitialDownload);
