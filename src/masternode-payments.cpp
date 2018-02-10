@@ -299,7 +299,7 @@ void CMasternodePayments::FillBlockPayee(CMutableTransaction& txNew, int nBlockH
 
     LogPrintf("CMasternodePayments::FillBlockPayee -- Masternode payment %lld to %s\n", masternodePayment, address2.ToString());
 }
-
+//取得主节点支持的版本号
 int CMasternodePayments::GetMinMasternodePaymentsProto() {
     return sporkManager.IsSporkActive(SPORK_10_MASTERNODE_PAY_UPDATED_NODES)
             ? MIN_MASTERNODE_PAYMENT_PROTO_VERSION_2
