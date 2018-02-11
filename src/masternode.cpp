@@ -345,7 +345,7 @@ void CMasternode::UpdateLastPaid(const CBlockIndex *pindex, int nMaxBlocksToScan
 }
 
 #ifdef ENABLE_WALLET
-//创建主节点连接
+//创建主节点连接  这个函数只是准备数据
 bool CMasternodeBroadcast::Create(std::string strService, std::string strKeyMasternode, std::string strTxHash, std::string strOutputIndex, std::string& strErrorRet, CMasternodeBroadcast &mnbRet, bool fOffline)
 {
     COutPoint outpoint;
@@ -402,7 +402,7 @@ bool CMasternodeBroadcast::Create(const COutPoint& outpoint, const CService& ser
     };
 
     CMasternodePing mnp(outpoint);
-    if (!mnp.Sign(keyMasternodeNew, pubKeyMasternodeNew))
+    if (!mnp.Sign(keyMasternodeNew, pubKeyMasternodeNew))//签名
         return Log(strprintf("Failed to sign ping, masternode=%s", outpoint.ToStringShort()));
 
     mnbRet = CMasternodeBroadcast(service, outpoint, pubKeyCollateralAddressNew, pubKeyMasternodeNew, PROTOCOL_VERSION);
@@ -411,7 +411,7 @@ bool CMasternodeBroadcast::Create(const COutPoint& outpoint, const CService& ser
         return Log(strprintf("Invalid IP address, masternode=%s", outpoint.ToStringShort()));
 
     mnbRet.lastPing = mnp;
-    if (!mnbRet.Sign(keyCollateralAddressNew))
+    if (!mnbRet.Sign(keyCollateralAddressNew))//签名
         return Log(strprintf("Failed to sign broadcast, masternode=%s", outpoint.ToStringShort()));
 
     return true;
