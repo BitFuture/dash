@@ -1136,7 +1136,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
     //-checkblockindex：每隔一段时间检查mapBlockIndex、setBlockIndexCandidates、chainActive和mapBlockUnlinked变量的一致性。
     //-checkpoints：该变量默认为1，表示不验证当前已经存在的链；如果为0，表示要检查一些校验点的区块信息是否正确，所有校验点的信息也都保存在chainparams中的checkpointdata中。
     fCheckBlockIndex = GetBoolArg("-checkblockindex", chainparams.DefaultConsistencyChecks());
-    fCheckpointsEnabled = GetBoolArg("-checkpoints", DEFAULT_CHECKPOINTS_ENABLED);
+    fCheckpointsEnabled = false;//GetBoolArg("-checkpoints", DEFAULT_CHECKPOINTS_ENABLED);
 
     //-assumevalid=blockid：表示在blockid之前的所有区块都假设正确的，也就是不用再去验证。如果没有设置，那么就要验证之前所有区块的签名信息。
     hashAssumeValid = uint256S(GetArg("-assumevalid", chainparams.GetConsensus().defaultAssumeValid.GetHex()));

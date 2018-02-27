@@ -262,7 +262,7 @@ public:
         consensus.powLimit = uint256S("00000fffff000000000000000000000000000000000000000000000000000000");
         consensus.nPowTargetTimespan = 24 * 60 * 60; // Dash: 1 day
         consensus.nPowTargetSpacing = 2.5 * 60; // Dash: 2.5 minutes
-        consensus.fPowAllowMinDifficultyBlocks = false;
+        consensus.fPowAllowMinDifficultyBlocks = true;
         consensus.fPowNoRetargeting = false;
         consensus.nPowKGWHeight = 15200;
         consensus.nPowDGWHeight = 34140;
@@ -286,11 +286,13 @@ public:
 
         // The best chain should have at least this much work.
         //genchainparams 会写日志，修改这个值，用以确认 chian 是否合法
-        consensus.nMinimumChainWork = uint256S("0000000000000000000000000000000000000000000000000000000013f013f0"); // 782700
+        consensus.nMinimumChainWork = uint256S("0x00"); // 782700
+//        consensus.nMinimumChainWork = uint256S("0000000000000000000000000000000000000000000000000000000013f013f0"); // 782700
 
         // By default assume that the signatures in ancestors of this block are valid.
         //检查合法性的时候，这个之前的就不用检查了
-        consensus.defaultAssumeValid = uint256S("00000c5c8ae1772445c019911cce7535cd91af311f9ae4da5686458028cd2f53"); // 782700
+ //       consensus.defaultAssumeValid = uint256S("00000c5c8ae1772445c019911cce7535cd91af311f9ae4da5686458028cd2f53"); // 782700
+        consensus.defaultAssumeValid = uint256S("0x00"); // 782700
 
         /**
          * The message start string is designed to be unlikely to occur in normal data.
