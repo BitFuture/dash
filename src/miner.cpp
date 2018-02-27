@@ -483,6 +483,7 @@ void static BitcoinMiner(int iIndex,const CChainParams& chainparams, CConnman& c
     RenameThread("dash-miner");  //修改线程名称
 
     unsigned int nExtraNonce = 0;
+    int iMinerSleep = GetArg("-minersleep",0);
 
     boost::shared_ptr<CReserveScript> coinbaseScript;
     //虚函数，调用到　CWallet::GetScriptForMining　　　CWallet::ReserveKeyFromKeyPool　　从key池中找到有效的一个地址
@@ -575,7 +576,8 @@ void static BitcoinMiner(int iIndex,const CChainParams& chainparams, CConnman& c
                     if ((pblock->nNonce & 0xFF) == 0)//超过 FF 次，进行一下常规检查
                         break;
                 }
-
+                if(iMinerSleep>0 && (pblock->nNonce & 0xFFF) == 0)
+                       MilliSleep(iMinerSleep);
                 // Check for stop or if block needs to be rebuilt  上层会打断当前计算，例如 接收到新块等等
                 boost::this_thread::interruption_point();
                 // Regtest mode doesn't require peers 没网络连接了
@@ -584,7 +586,7 @@ void static BitcoinMiner(int iIndex,const CChainParams& chainparams, CConnman& c
                 if (pblock->nNonce >= 0xffff0000) //超过总的计数
                     break;
                 //60s 没有计算出来，而且接受到新的交易，退出 ？？？？？？   防止　gpu挖矿　？
-                if (mempool.GetTransactionsUpdated() != nTransactionsUpdatedLast && GetTime() - nStart > 60) 
+                if (mempool.GetTransactionsUpdated() != nTransactionsUpdatedLast && GetTime() - nStart > 5*60) 
                     break;
                 if (pindexPrev != chainActive.Tip())  //接受到新块，前一块已经不是最顶部块了。
                     break;

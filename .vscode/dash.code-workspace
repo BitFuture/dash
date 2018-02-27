@@ -45,7 +45,8 @@
 			"memory": "cpp",
 			"*.ipp": "cpp",
 			"map": "cpp",
-			"*.moc": "cpp"
+			"*.moc": "cpp",
+			"future": "cpp"
 		}
 	}
 }

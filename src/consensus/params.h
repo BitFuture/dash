@@ -90,7 +90,7 @@ struct Params {
     int64_t nPowTargetTimespan;// 难度调整时间 一天 
     int nPowKGWHeight;
     int nPowDGWHeight;
-    int64_t DifficultyAdjustmentInterval() const { return nPowTargetTimespan / nPowTargetSpacing; } //每1天调整一次难度
+    int64_t DifficultyAdjustmentInterval() const { return 10;}//nPowTargetTimespan / nPowTargetSpacing; } //每1天调整一次难度
     uint256 nMinimumChainWork;// 当前难度最小值  有效区块，必须包含这个
     uint256 defaultAssumeValid; // 在此区块之前的区块都认为是有效的
 };

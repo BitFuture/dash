@@ -666,7 +666,7 @@ void ReadConfigFile(map<string, string>& mapSettingsRet,
         string strValue = it->value[0];
         InterpretNegativeSetting(strKey, strValue);
         if (mapSettingsRet.count(strKey) == 0)
-            mapSettingsRet[strKey] = strValue;
+            mapSettingsRet[strKey] = strValue;            
         mapMultiSettingsRet[strKey].push_back(strValue);
     }
     // If datadir is changed in .conf file:
