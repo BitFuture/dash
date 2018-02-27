@@ -379,8 +379,8 @@ public:
         //CheckLastCheckpoint 会用这个表检查bestchain是否合法
         checkpointData = (CCheckpointData) {
             boost::assign::map_list_of
-            (0,   uint256S("00000c8b0036cadbcbb62f4257c10f16c9aaca09820fe0f79ef2544f567fd8b9"))
-            (20,  uint256S("00000819a6e2d5e7c0453ef026e4aa378358ecbab00ef9e30acd2a2459ded1a5"))
+            (0,   uint256S("00000c8b0036cadbcbb62f4257c10f16c9aaca09820fe0f79ef2544f567fd8b9")),
+         /*   (20,  uint256S("00000819a6e2d5e7c0453ef026e4aa378358ecbab00ef9e30acd2a2459ded1a5"))
             (40,  uint256S("00000afd56aa3e77063137d85712557dd445071f39e0d1ae200b1e6da2c2e8e0"))
             (60,  uint256S("00000a713c457041757bcff414eeefd8499c6fda0925d907ffd2833d4d53cfd3"))
             (80,  uint256S("00000cd414ca01361a219ceb15f3a31c916d05a520b8896a8b88f6b94ef51ac5"))
@@ -395,9 +395,9 @@ public:
             (260, uint256S("00000958bcea194dc9420a2c99bbf6e1eb3c79af7e15600ebcf752f738afa16f"))
             (280, uint256S("000001bca9f347c2261c51e7cb37ae6fc7721b47285419bab70431541d8d7cb3"))
             (300, uint256S("00000c5c8ae1772445c019911cce7535cd91af311f9ae4da5686458028cd2f53"))
-            (318, uint256S("000005291547416622dc50b4c1019de62c96d597c7a67c56d0b8d1e9f3934b14")),
+            (318, uint256S("000005291547416622dc50b4c1019de62c96d597c7a67c56d0b8d1e9f3934b14")),*/
             1516847452, // * UNIX timestamp of last checkpoint block
-            319,    // * total number of transactions between genesis and last checkpoint
+            1,    // * total number of transactions between genesis and last checkpoint
                         //   (the tx=... number in the SetBestChain debug.log lines)
             50        // * estimated number of transactions per day after checkpoint
         };
