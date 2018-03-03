@@ -713,7 +713,8 @@ bool CMasternodePaymentVote::IsValid(CNode* pnode, int nValidationHeight, std::s
 
     return true;
 }
-
+// UpdatedBlockTip 更新已经奖励的钱数  
+// ProcessBlock 为当前 
 bool CMasternodePayments::ProcessBlock(int nBlockHeight, CConnman& connman)
 {
     // DETERMINE IF WE SHOULD BE VOTING FOR THE NEXT PAYEE
