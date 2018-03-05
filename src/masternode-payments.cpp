@@ -263,6 +263,16 @@ bool CMasternodePayments::CanVote(COutPoint outMasternode, int nBlockHeight)
 *
 *   Fill Masternode ONLY payment block
 */
+//奖励费用来源
+//CMasternode::UpdateLastPaid 每个块来的时候，刷新每个主节点最后奖励块的高度，投票的时候，倒叙
+//CMasternodePayments::ProcessBlock 每个新块来的时候，+10 投票后面10个挖矿所需要的奖励者。
+//mnpayments.GetBlockPayee 如果已经有投票数据，直接用，否则重新排序，一般都有。
+//排序，先根据最后奖励块高度倒叙，再取前101 挑选10个，取hash最接近的。
+//当奖励投票没有的时候，重新排序，取后面8个已经投好票的，要排除。
+//投好票的数据再 mnpayments.GetBlockPayee 中，挖矿，不用计算，直接使用
+//AddPaymentVote为计票函数，全网广播。 消息中也会收到
+//CMasternodePayments::CheckAndRemove 删除无效的投票列表
+//投票列表中记录主节点hash和票数，全网同步
 
 void CMasternodePayments::FillBlockPayee(CMutableTransaction& txNew, int nBlockHeight, CAmount blockReward, CTxOut& txoutMasternodeRet)
 {

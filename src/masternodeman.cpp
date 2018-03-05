@@ -67,7 +67,7 @@ CMasternodeMan::CMasternodeMan()
   mapSeenMasternodePing(),
   nDsqCount(0)
 {}
-
+// 添加主节点数据
 bool CMasternodeMan::Add(CMasternode &mn)
 {
     LOCK(cs);

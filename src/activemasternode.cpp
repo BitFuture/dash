@@ -10,7 +10,14 @@
 
 // Keep track of the active Masternode
 CActiveMasternode activeMasternode;
-
+// 每10分钟检查一次状态
+// 主节点服务器，启动，并定期广播心跳
+// 钱包启动主节点数据，广播服务器 ip 公钥，1000的id
+// 所有节点验证主节点服务器的心跳，激活主节点数据状态。
+// 主节点服务器接受新块，刷新每个主节点最后奖励块高度
+// 根据当前块高度 +10 投票10个块后需要奖励的主节点。
+// 全网同步并维护奖励列表
+//  旷工奖励主节点的数据，校验也是根据奖励列表验证
 void CActiveMasternode::ManageState(CConnman& connman)
 {
     LogPrint("masternode", "CActiveMasternode::ManageState -- Start\n");
