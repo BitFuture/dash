@@ -23,13 +23,14 @@ TransactionSignatureCreator::TransactionSignatureCreator(const CKeyStore* keysto
 bool TransactionSignatureCreator::CreateSig(std::vector<unsigned char>& vchSig, const CKeyID& address, const CScript& scriptCode) const
 {
     CKey key;
+    //根据ID 找到对应私钥
     if (!keystore->GetKey(address, key))
         return false;
-
+    //根据in / out  算出所有需要锁定的数据hash
     uint256 hash = SignatureHash(scriptCode, *txTo, nIn, nHashType);
-    if (!key.Sign(hash, vchSig))
+    if (!key.Sign(hash, vchSig))//私钥签名
         return false;
-    vchSig.push_back((unsigned char)nHashType);
+    vchSig.push_back((unsigned char)nHashType);//签名类型放最后
     return true;
 }
 
@@ -38,7 +39,7 @@ static bool Sign1(const CKeyID& address, const BaseSignatureCreator& creator, co
     vector<unsigned char> vchSig;
     if (!creator.CreateSig(vchSig, address, scriptCode))
         return false;
-    scriptSigRet << vchSig;
+    scriptSigRet << vchSig;//串行成 Sign
     return true;
 }
 
@@ -62,12 +63,18 @@ static bool SignN(const vector<valtype>& multisigdata, const BaseSignatureCreato
  * unless whichTypeRet is TX_SCRIPTHASH, in which case scriptSigRet is the redemption script.
  * Returns false if scriptPubKey could not be completely satisfied.
  */
+// creator 需要签名的数据，是对in中的每一个签名
+// scriptPubKey  对应in中的上一个 out 的签名
+// scriptSigRet  返回in的签名
+// whichTypeRet  返回签名类型
+
 static bool SignStep(const BaseSignatureCreator& creator, const CScript& scriptPubKey,
                      CScript& scriptSigRet, txnouttype& whichTypeRet)
 {
     scriptSigRet.clear();
-
-    vector<valtype> vSolutions;
+    // 
+    vector<valtype> vSolutions; 
+    //从out的签名取得签名类型，和签名公钥
     if (!Solver(scriptPubKey, whichTypeRet, vSolutions))
         return false;
 
@@ -78,16 +85,17 @@ static bool SignStep(const BaseSignatureCreator& creator, const CScript& scriptP
     case TX_NULL_DATA:
         return false;
     case TX_PUBKEY:
+      //简单签名，根据out中的签名，算出钱包中的私要ID
         keyID = CPubKey(vSolutions[0]).GetID();
         return Sign1(keyID, creator, scriptPubKey, scriptSigRet);
     case TX_PUBKEYHASH:
         keyID = CKeyID(uint160(vSolutions[0]));
-        if (!Sign1(keyID, creator, scriptPubKey, scriptSigRet))
+        if (!Sign1(keyID, creator, scriptPubKey, scriptSigRet)) //如果签名成功
             return false;
         else
         {
             CPubKey vch;
-            creator.KeyStore().GetPubKey(keyID, vch);
+            creator.KeyStore().GetPubKey(keyID, vch);//产生一个公钥签名
             scriptSigRet << ToByteVector(vch);
         }
         return true;
@@ -122,7 +130,7 @@ bool ProduceSignature(const BaseSignatureCreator& creator, const CScript& fromPu
         if (!fSolved) return false;
     }
 
-    // Test solution
+    // Test solution  检查签名正确性
     return VerifyScript(scriptSig, fromPubKey, STANDARD_SCRIPT_VERIFY_FLAGS, creator.Checker());
 }
 
